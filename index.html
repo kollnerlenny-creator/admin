@@ -195,6 +195,16 @@
   </div>
 
   <div class="info-editor">
+    <label for="opensAtInput">Anmeldebeginn (davor läuft ein Countdown, Formular gesperrt)</label>
+    <input type="datetime-local" id="opensAtInput" style="max-width:240px;">
+    <div class="info-editor-actions">
+      <button id="opensAtSaveBtn">Speichern</button>
+      <button id="opensAtClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Sofort geöffnet</button>
+      <span class="price-saved" id="opensAtSaved">Gespeichert ✓</span>
+    </div>
+  </div>
+
+  <div class="info-editor">
     <label for="deadlineInput">Anmeldeschluss (danach ist das Formular gesperrt)</label>
     <input type="datetime-local" id="deadlineInput" style="max-width:240px;">
     <div class="info-editor-actions">
@@ -301,6 +311,10 @@
     onSnapshot(doc(db, 'settings', 'deadline'), (snap) => {
       const iso = snap.exists() ? snap.data().timestamp : null;
       document.getElementById('deadlineInput').value = iso ? isoToLocalInputValue(iso) : '';
+    });
+    onSnapshot(doc(db, 'settings', 'opensAt'), (snap) => {
+      const iso = snap.exists() ? snap.data().timestamp : null;
+      document.getElementById('opensAtInput').value = iso ? isoToLocalInputValue(iso) : '';
     });
   }
 
@@ -515,6 +529,21 @@
   document.getElementById('deadlineClearBtn').addEventListener('click', async () => {
     await setDoc(doc(db, 'settings', 'deadline'), { timestamp: null });
     document.getElementById('deadlineInput').value = '';
+  });
+
+  document.getElementById('opensAtSaveBtn').addEventListener('click', async () => {
+    const val = document.getElementById('opensAtInput').value;
+    if (!val) { alert('Bitte ein Datum/Uhrzeit wählen oder "Sofort geöffnet" nutzen.'); return; }
+    const iso = new Date(val).toISOString();
+    await setDoc(doc(db, 'settings', 'opensAt'), { timestamp: iso });
+    const savedEl = document.getElementById('opensAtSaved');
+    savedEl.classList.add('show');
+    setTimeout(() => savedEl.classList.remove('show'), 2000);
+  });
+
+  document.getElementById('opensAtClearBtn').addEventListener('click', async () => {
+    await setDoc(doc(db, 'settings', 'opensAt'), { timestamp: null });
+    document.getElementById('opensAtInput').value = '';
   });
 
   document.getElementById('search').addEventListener('input', render);
