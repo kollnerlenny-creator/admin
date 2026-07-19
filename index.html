@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Winter Ball · Admin</title>
+<style>
+  :root{
+    --bg-1:#0a0e1a; --bg-2:#131c30;
+    --glass:rgba(255,255,255,0.06); --glass-border:rgba(255,255,255,0.13);
+    --text:#eef2fb; --text-dim:#9aa7c2;
+    --accent:#8fb4ff; --success:#7fe0a8; --error:#ff8080; --warn:#ffd27f;
+    --radius:16px; --radius-sm:10px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Segoe UI',system-ui,sans-serif;
+    background:linear-gradient(180deg,var(--bg-1),var(--bg-2));
+    color:var(--text); min-height:100vh; padding:24px 16px;
+  }
+  .wrap{max-width:960px; margin:0 auto;}
+  h1{font-weight:300; font-size:26px; margin-bottom:4px;}
+  .sub{color:var(--text-dim); font-size:13px; margin-bottom:24px;}
+
+  .login-card{
+    max-width:360px; margin:80px auto; padding:32px;
+    background:var(--glass); backdrop-filter:blur(20px); border:1px solid var(--glass-border);
+    border-radius:var(--radius); text-align:center;
+  }
+  .login-card input{
+    width:100%; padding:12px 14px; margin-top:12px; background:rgba(255,255,255,0.05);
+    border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:14px;
+  }
+  .login-card button{
+    width:100%; margin-top:14px; padding:12px; border:none; border-radius:var(--radius-sm);
+    background:var(--accent); color:#0a0e1a; font-weight:600; cursor:pointer;
+  }
+  .login-error{color:var(--error); font-size:13px; margin-top:10px; display:none;}
+
+  .stats{display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;}
+  .stat{
+    flex:1; min-width:120px; padding:16px; background:var(--glass); border:1px solid var(--glass-border);
+    border-radius:var(--radius-sm); backdrop-filter:blur(16px);
+  }
+  .stat .num{font-size:26px; font-weight:600;}
+  .stat .lbl{font-size:12px; color:var(--text-dim); margin-top:2px;}
+
+  .price-bar{
+    display:flex; align-items:center; gap:10px; margin-bottom:20px; padding:14px 16px;
+    background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius-sm);
+    backdrop-filter:blur(16px); flex-wrap:wrap;
+  }
+  .price-bar label{font-size:13px; color:var(--text-dim);}
+  .price-bar input{
+    width:100px; padding:8px 10px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border);
+    border-radius:var(--radius-sm); color:var(--text); font-size:14px;
+  }
+  .price-bar button{
+    padding:8px 14px; border-radius:var(--radius-sm); border:none; background:var(--accent);
+    color:#0a0e1a; font-weight:600; font-size:13px; cursor:pointer;
+  }
+  .price-saved{color:var(--success); font-size:12px; opacity:0; transition:opacity 0.3s;}
+  .price-saved.show{opacity:1;}
+
+  .toolbar{display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;}
+  .toolbar input{
+    flex:1; min-width:180px; padding:10px 14px; background:var(--glass); border:1px solid var(--glass-border);
+    border-radius:var(--radius-sm); color:var(--text); font-size:14px;
+  }
+  .toolbar button{
+    padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--glass-border);
+    background:rgba(255,255,255,0.05); color:var(--text); cursor:pointer; font-size:13px;
+  }
+
+  .add-form{
+    display:none; flex-direction:column; gap:10px; margin-bottom:16px; padding:16px;
+    background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius-sm);
+    backdrop-filter:blur(16px);
+  }
+  .add-form.show{display:flex;}
+  .add-form input{
+    padding:10px 12px; background:rgba(255,255,255,0.05);
+    border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:13px;
+  }
+  .add-row{display:flex; gap:10px; flex-wrap:wrap;}
+  .add-row input{flex:1; min-width:160px;}
+  .add-row select{flex:0 0 100px; padding:10px 8px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:13px;}
+  .companions-block{display:flex; flex-direction:column; gap:8px;}
+  .companion-add-row{display:flex; gap:8px;}
+  .companion-add-row input{flex:1;}
+  .companion-add-row select{flex:0 0 90px; padding:10px 8px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:13px;}
+  .companion-add-row button{
+    width:36px; border-radius:var(--radius-sm); border:1px solid rgba(255,128,128,0.3);
+    background:rgba(255,128,128,0.1); color:var(--error); cursor:pointer;
+  }
+  .add-form-actions{display:flex; gap:10px;}
+  .add-form-actions button{
+    padding:10px 16px; border-radius:var(--radius-sm); border:none; cursor:pointer; font-size:13px; font-weight:600;
+  }
+  #addSaveBtn{background:var(--accent); color:#0a0e1a;}
+  .add-form-actions button.secondary{background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border); font-weight:400;}
+  #addCompanionFieldBtn{
+    align-self:flex-start; background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; padding:4px 0;
+  }
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{
+    text-align:left; padding:10px 12px; color:var(--text-dim); font-weight:500;
+    border-bottom:1px solid var(--glass-border); font-size:12px; text-transform:uppercase; letter-spacing:0.5px;
+  }
+  tbody tr{border-bottom:1px solid rgba(255,255,255,0.05);}
+  tbody tr:hover{background:rgba(255,255,255,0.03);}
+  tbody td{padding:10px 12px; vertical-align:top;}
+  .badge{
+    display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600;
+  }
+  .badge.in{background:rgba(127,224,168,0.15); color:var(--success);}
+  .badge.out{background:rgba(255,255,255,0.08); color:var(--text-dim);}
+  .pay-btn{
+    padding:5px 12px; border-radius:20px; border:1px solid rgba(255,210,127,0.4);
+    background:rgba(255,210,127,0.1); color:var(--warn); font-size:11px; font-weight:600; cursor:pointer;
+  }
+  .pay-btn:hover{background:rgba(255,210,127,0.2);}
+  .pay-btn:disabled{opacity:0.5; cursor:default;}
+  .delete-btn{
+    background:rgba(255,128,128,0.1); border:1px solid rgba(255,128,128,0.25);
+    color:var(--error); border-radius:var(--radius-sm); width:34px; height:34px;
+    cursor:pointer; font-size:14px;
+  }
+  .delete-btn:hover{background:rgba(255,128,128,0.2);}
+  .attendee-list{list-style:none; font-size:12px; color:var(--text-dim);}
+  .attendee-list li{margin-bottom:2px;}
+  .attendee-list .orderer{color:var(--text); font-weight:600;}
+  .table-wrap{
+    background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius);
+    overflow-x:auto; backdrop-filter:blur(16px);
+  }
+</style>
+</head>
+<body>
+
+<div class="login-card" id="loginCard">
+  <h1 style="margin-bottom:16px;">Admin Login</h1>
+  <input type="email" id="loginEmail" placeholder="E-Mail">
+  <input type="password" id="loginPass" placeholder="Passwort">
+  <button id="loginBtn">Anmelden</button>
+  <div class="login-error" id="loginError">Login fehlgeschlagen.</div>
+</div>
+
+<div class="wrap" id="dashboard" style="display:none;">
+  <h1>Winter Ball · Bestellungen</h1>
+  <div class="sub">30.01.2027 · 17:30 Uhr</div>
+
+  <div class="stats">
+    <div class="stat"><div class="num" id="statOrders">0</div><div class="lbl">Bestellungen</div></div>
+    <div class="stat"><div class="num" id="statTickets">0</div><div class="lbl">Tickets gesamt</div></div>
+    <div class="stat"><div class="num" id="statPaid">0</div><div class="lbl">Bezahlt</div></div>
+    <div class="stat"><div class="num" id="statCheckedIn">0</div><div class="lbl">Eingecheckt</div></div>
+    <div class="stat"><div class="num" id="statRevenue">0 €</div><div class="lbl">Umsatz</div></div>
+  </div>
+
+  <div class="price-bar">
+    <label for="priceU18Input">Preis U18 (€)</label>
+    <input type="number" id="priceU18Input" min="0" step="0.5" placeholder="z.B. 10">
+    <label for="priceUe18Input">Preis Ü18 (€)</label>
+    <input type="number" id="priceUe18Input" min="0" step="0.5" placeholder="z.B. 15">
+    <button id="priceSaveBtn">Speichern</button>
+    <span class="price-saved" id="priceSaved">Gespeichert ✓</span>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Nach Name oder E-Mail suchen...">
+    <button id="addBtn">+ Bestellung hinzufügen</button>
+    <button id="exportBtn">CSV exportieren</button>
+    <button id="logoutBtn">Logout</button>
+  </div>
+
+  <div class="add-form" id="addForm">
+    <div class="add-row">
+      <input type="text" id="addName" placeholder="Name des Bestellers">
+      <input type="email" id="addEmail" placeholder="E-Mail des Bestellers">
+      <select id="addCategory">
+        <option value="">Alter?</option>
+        <option value="u18">U18</option>
+        <option value="ue18">Ü18</option>
+      </select>
+    </div>
+    <div class="companions-block" id="companionsBlock"></div>
+    <button type="button" id="addCompanionFieldBtn">+ Begleitung hinzufügen</button>
+    <div class="add-form-actions">
+      <button id="addSaveBtn">Anlegen</button>
+      <button id="addCancelBtn" class="secondary">Abbrechen</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Besteller</th><th>Begleitungen</th><th>E-Mail</th><th>Tickets</th><th>Bezahlt</th><th></th></tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+  import { getFirestore, collection, addDoc, doc, writeBatch, onSnapshot, query, where, orderBy, updateDoc, deleteDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDQaRxga3bFrNkyU6E_sQpp5_0G4ApInOg",
+    authDomain: "winterball-27.firebaseapp.com",
+    projectId: "winterball-27",
+    storageBucket: "winterball-27.firebasestorage.app",
+    messagingSenderId: "487160103602",
+    appId: "1:487160103602:web:961a10f85bfdf77d3f7fab"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  // TODO: Nach dem Worker-Deploy hier die Worker-URL eintragen
+  const WORKER_URL = "https://winterball-worker.kollnerlenny.workers.dev";
+
+  let allRegs = [];
+  let allTickets = [];
+  let ticketPrices = { u18: 0, ue18: 0 };
+
+  onAuthStateChanged(auth, (user) => {
+    document.getElementById('loginCard').style.display = user ? 'none' : 'block';
+    document.getElementById('dashboard').style.display = user ? 'block' : 'none';
+    if(user) startListening();
+  });
+
+  document.getElementById('loginBtn').addEventListener('click', async () => {
+    const email = document.getElementById('loginEmail').value;
+    const pass = document.getElementById('loginPass').value;
+    try { await signInWithEmailAndPassword(auth, email, pass); }
+    catch(e){ document.getElementById('loginError').style.display = 'block'; }
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
+
+  function startListening(){
+    onSnapshot(query(collection(db, 'registrations'), orderBy('createdAt', 'desc')), (snap) => {
+      allRegs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      render();
+    });
+    onSnapshot(collection(db, 'tickets'), (snap) => {
+      allTickets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      render();
+    });
+    onSnapshot(doc(db, 'settings', 'pricing'), (snap) => {
+      const data = snap.exists() ? snap.data() : {};
+      ticketPrices = { u18: Number(data.u18 || 0), ue18: Number(data.ue18 || 0) };
+      document.getElementById('priceU18Input').value = ticketPrices.u18 || '';
+      document.getElementById('priceUe18Input').value = ticketPrices.ue18 || '';
+      render();
+    });
+  }
+
+  function ticketsFor(regId){
+    return allTickets.filter(t => t.registrationId === regId);
+  }
+
+  function categoryLabel(cat){
+    return cat === 'u18' ? 'U18' : cat === 'ue18' ? 'Ü18' : '';
+  }
+
+  function render(){
+    const term = document.getElementById('search').value.toLowerCase();
+    const rows = allRegs.filter(r =>
+      !term || (r.name||'').toLowerCase().includes(term) || (r.email||'').toLowerCase().includes(term)
+      || (r.companions||[]).some(c => (c.name||'').toLowerCase().includes(term))
+    );
+
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = rows.map(r => {
+      const tickets = ticketsFor(r.id);
+      const companionsHtml = (r.companions||[]).length
+        ? `<ul class="attendee-list">${r.companions.map(c => `<li>${escapeHtml(c.name)} <span class="badge out">${categoryLabel(c.category)}</span></li>`).join('')}</ul>`
+        : '<span style="color:var(--text-dim)">—</span>';
+      const checkedInCount = tickets.filter(t => t.checkedIn).length;
+
+      return `
+      <tr>
+        <td><span class="attendee-list orderer">${escapeHtml(r.name||'')} <span class="badge out">${categoryLabel(r.category)}</span></span></td>
+        <td>${companionsHtml}</td>
+        <td>${escapeHtml(r.email||'')}</td>
+        <td>${tickets.length} Ticket(s)${checkedInCount ? ` · <span class="badge in">${checkedInCount} eingecheckt</span>` : ''}</td>
+        <td>
+          ${r.paid
+            ? `<span class="badge in">Bezahlt</span>`
+            : `<button class="pay-btn" data-id="${r.id}">Als bezahlt markieren</button>`}
+        </td>
+        <td><button class="delete-btn" data-id="${r.id}" title="Bestellung löschen">🗑</button></td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('statOrders').textContent = allRegs.length;
+    document.getElementById('statTickets').textContent = allTickets.length;
+    document.getElementById('statPaid').textContent = allRegs.filter(r=>r.paid).length;
+    document.getElementById('statCheckedIn').textContent = allTickets.filter(t=>t.checkedIn).length;
+    const revenue = allTickets
+      .filter(t => t.paid)
+      .reduce((sum, t) => sum + (t.category === 'u18' ? ticketPrices.u18 : ticketPrices.ue18), 0);
+    document.getElementById('statRevenue').textContent = revenue.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
+
+    tbody.querySelectorAll('.pay-btn').forEach(btn => {
+      btn.addEventListener('click', () => markAsPaid(btn.dataset.id, btn));
+    });
+    tbody.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => deleteRegistration(btn.dataset.id));
+    });
+  }
+
+  async function deleteRegistration(regId){
+    const reg = allRegs.find(r => r.id === regId);
+    if(!reg) return;
+    const confirmed = confirm(`Bestellung von "${reg.name}" (inkl. aller zugehörigen Tickets) wirklich unwiderruflich löschen?`);
+    if(!confirmed) return;
+
+    const tickets = ticketsFor(regId);
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'registrations', regId));
+    tickets.forEach(t => batch.delete(doc(db, 'tickets', t.id)));
+    await batch.commit();
+  }
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  async function markAsPaid(regId, btnEl){
+    btnEl.disabled = true;
+    btnEl.textContent = 'Wird verarbeitet...';
+    const reg = allRegs.find(r => r.id === regId);
+    const tickets = ticketsFor(regId);
+    if(!reg || tickets.length === 0) return;
+
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'registrations', regId), { paid: true });
+      tickets.forEach(t => batch.update(doc(db, 'tickets', t.id), { paid: true }));
+      await batch.commit();
+
+      const res = await fetch(WORKER_URL + '/send-tickets', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          email: reg.email,
+          ordererName: reg.name,
+          attendees: tickets.map(t => ({ name: t.name, ticketId: t.ticketId }))
+        })
+      });
+
+      if(!res.ok) throw new Error('Ticket-Mail fehlgeschlagen');
+    } catch(err){
+      console.error(err);
+      alert('Als bezahlt markiert, aber Ticket-Mail konnte nicht verschickt werden. Bitte manuell prüfen.');
+      btnEl.disabled = false;
+      btnEl.textContent = 'Erneut versuchen';
+    }
+  }
+
+  function genTicketId(){
+    return 'WB27-' + Math.random().toString(36).slice(2,8).toUpperCase();
+  }
+
+  // --- Manuelle Bestellung anlegen ---
+  const companionsBlock = document.getElementById('companionsBlock');
+  document.getElementById('addCompanionFieldBtn').addEventListener('click', () => addCompanionField());
+
+  function addCompanionField(){
+    const row = document.createElement('div');
+    row.className = 'companion-add-row';
+    row.innerHTML = `
+      <input type="text" class="add-companion-name" placeholder="Name der Begleitung">
+      <select class="add-companion-category">
+        <option value="">Alter?</option>
+        <option value="u18">U18</option>
+        <option value="ue18">Ü18</option>
+      </select>
+      <button type="button">×</button>`;
+    row.querySelector('button').addEventListener('click', () => row.remove());
+    companionsBlock.appendChild(row);
+  }
+
+  document.getElementById('addBtn').addEventListener('click', () => {
+    document.getElementById('addForm').classList.toggle('show');
+  });
+  document.getElementById('addCancelBtn').addEventListener('click', () => {
+    document.getElementById('addForm').classList.remove('show');
+  });
+
+  document.getElementById('addSaveBtn').addEventListener('click', async () => {
+    const name = document.getElementById('addName').value.trim();
+    const email = document.getElementById('addEmail').value.trim();
+    const category = document.getElementById('addCategory').value;
+    const companionRows = Array.from(document.querySelectorAll('.companion-add-row'));
+    const companions = companionRows.map(row => ({
+      name: row.querySelector('.add-companion-name').value.trim(),
+      category: row.querySelector('.add-companion-category').value
+    })).filter(c => c.name.length > 0);
+
+    if(!name || !email || !category){
+      alert('Bitte Name, E-Mail und Altersgruppe des Bestellers ausfüllen.');
+      return;
+    }
+    if(companions.some(c => !c.category)){
+      alert('Bitte bei jeder Begleitung die Altersgruppe angeben.');
+      return;
+    }
+
+    const regRef = await addDoc(collection(db, 'registrations'), {
+      name, email, category, companions, paid: false, createdAt: serverTimestamp()
+    });
+
+    const batch = writeBatch(db);
+    [{ name, category }, ...companions].forEach(attendee => {
+      const ticketRef = doc(collection(db, 'tickets'));
+      batch.set(ticketRef, {
+        registrationId: regRef.id, name: attendee.name, category: attendee.category, email,
+        ticketId: genTicketId(), paid: false, checkedIn: false, createdAt: serverTimestamp()
+      });
+    });
+    await batch.commit();
+
+    document.getElementById('addName').value = '';
+    document.getElementById('addEmail').value = '';
+    document.getElementById('addCategory').value = '';
+    companionsBlock.innerHTML = '';
+    document.getElementById('addForm').classList.remove('show');
+  });
+
+  document.getElementById('priceSaveBtn').addEventListener('click', async () => {
+    const u18 = Number(document.getElementById('priceU18Input').value);
+    const ue18 = Number(document.getElementById('priceUe18Input').value);
+    if (isNaN(u18) || isNaN(ue18) || u18 < 0 || ue18 < 0) { alert('Bitte gültige Preise eingeben.'); return; }
+    await setDoc(doc(db, 'settings', 'pricing'), { u18, ue18 });
+    const savedEl = document.getElementById('priceSaved');
+    savedEl.classList.add('show');
+    setTimeout(() => savedEl.classList.remove('show'), 2000);
+  });
+
+  document.getElementById('search').addEventListener('input', render);
+
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const header = ['Besteller','Begleitungen','E-Mail','Tickets gesamt','Bezahlt'];
+    const rows = allRegs.map(r => [
+      r.name, (r.companions||[]).map(c => `${c.name} (${categoryLabel(c.category)})`).join('; '), r.email, ticketsFor(r.id).length, r.paid ? 'ja':'nein'
+    ]);
+    const csv = [header, ...rows].map(row => row.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'winterball-bestellungen.csv'; a.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+</body>
+</html>
