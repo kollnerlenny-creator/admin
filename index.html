@@ -148,6 +148,19 @@
   .attendee-list{list-style:none; font-size:12px; color:var(--text-dim);}
   .attendee-list li{margin-bottom:2px;}
   .attendee-list .orderer{color:var(--text); font-weight:600;}
+
+  .ticket-checkin-list{list-style:none; display:flex; flex-direction:column; gap:6px;}
+  .ticket-checkin-list li{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px;}
+  .checkin-toggle{
+    padding:4px 10px; border-radius:20px; font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap;
+    border:1px solid var(--glass-border); background:rgba(255,255,255,0.05); color:var(--text-dim);
+  }
+  .checkin-toggle.in{border-color:rgba(127,224,168,0.4); background:rgba(127,224,168,0.12); color:var(--success);}
+  .pdf-btn{
+    margin-left:8px; padding:5px 10px; border-radius:20px; border:1px solid var(--glass-border);
+    background:rgba(255,255,255,0.05); color:var(--text); font-size:11px; cursor:pointer;
+  }
+  .pdf-btn:hover{background:rgba(255,255,255,0.1);}
   .table-wrap{
     background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius);
     overflow-x:auto; backdrop-filter:blur(16px);
@@ -214,6 +227,15 @@
     </div>
   </div>
 
+  <div class="info-editor">
+    <label for="lernsaxThresholdInput">LernSax-Versand: Ab dieser Klassenstufe funktioniert der Weltweit-Modus (Mail geht normal raus). Darunter wird automatisch über deine eigene LernSax-Adresse verschickt.</label>
+    <input type="number" id="lernsaxThresholdInput" min="1" max="13" style="max-width:120px;" placeholder="z.B. 9">
+    <div class="info-editor-actions">
+      <button id="lernsaxThresholdSaveBtn">Speichern</button>
+      <span class="price-saved" id="lernsaxThresholdSaved">Gespeichert ✓</span>
+    </div>
+  </div>
+
   <div class="toolbar">
     <input type="text" id="search" placeholder="Nach Name oder E-Mail suchen...">
     <button id="addBtn">+ Bestellung hinzufügen</button>
@@ -242,7 +264,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Besteller</th><th>Begleitungen</th><th>E-Mail</th><th>Tickets</th><th>Bezahlt</th><th></th></tr>
+        <tr><th>Besteller</th><th>Begleitungen</th><th>E-Mail</th><th>Tickets / Check-in</th><th>Bezahlt</th><th></th></tr>
       </thead>
       <tbody id="tableBody"></tbody>
     </table>
@@ -273,6 +295,26 @@
   let allRegs = [];
   let allTickets = [];
   let ticketPrices = { u18: 0, ue18: 0 };
+  let lernsaxThreshold = null;
+
+  // Berechnet die Klassenstufe aus dem Einschulungsjahr am Ende der LernSax-Adresse
+  // (Muster: nachname+vorname-kürzel+einschulungsjahr@schule.lernsax.de)
+  function gradeFromEmail(email){
+    const [local, domain] = String(email || '').toLowerCase().split('@');
+    if (!domain || !domain.endsWith('lernsax.de')) return null;
+    const match = (local || '').match(/(\d{4})$/);
+    if (!match) return null;
+    const enrollYear = Number(match[1]);
+    const grade = (2026 - enrollYear) + 5; // Gymnasium: Einschulung = 5. Klasse, Schuljahr 2026/2027
+    return (grade >= 5 && grade <= 12) ? grade : null;
+  }
+
+  function shouldUseLernSax(email){
+    if (!lernsaxThreshold) return false;
+    const grade = gradeFromEmail(email);
+    if (grade === null) return false;
+    return grade < lernsaxThreshold;
+  }
 
   onAuthStateChanged(auth, (user) => {
     document.getElementById('loginCard').style.display = user ? 'none' : 'block';
@@ -316,6 +358,11 @@
       const iso = snap.exists() ? snap.data().timestamp : null;
       document.getElementById('opensAtInput').value = iso ? isoToLocalInputValue(iso) : '';
     });
+    onSnapshot(doc(db, 'settings', 'lernsaxThreshold'), (snap) => {
+      const grade = snap.exists() ? snap.data().grade : null;
+      document.getElementById('lernsaxThresholdInput').value = grade || '';
+      lernsaxThreshold = grade || null;
+    });
   }
 
   function isoToLocalInputValue(iso){
@@ -345,18 +392,28 @@
       const companionsHtml = (r.companions||[]).length
         ? `<ul class="attendee-list">${r.companions.map(c => `<li>${escapeHtml(c.name)} <span class="badge out">${categoryLabel(c.category)}</span></li>`).join('')}</ul>`
         : '<span style="color:var(--text-dim)">—</span>';
-      const checkedInCount = tickets.filter(t => t.checkedIn).length;
+
+      const ticketsHtml = tickets.length
+        ? `<ul class="ticket-checkin-list">${tickets.map(t => `
+            <li>
+              <span>${escapeHtml(t.name)}</span>
+              <button class="checkin-toggle ${t.checkedIn ? 'in' : ''}" data-ticket-id="${t.id}" data-state="${t.checkedIn ? '1' : '0'}">
+                ${t.checkedIn ? '✓ Eingecheckt' : 'Einchecken'}
+              </button>
+            </li>`).join('')}</ul>`
+        : '<span style="color:var(--text-dim)">—</span>';
 
       return `
       <tr>
         <td><span class="attendee-list orderer">${escapeHtml(r.name||'')} <span class="badge out">${categoryLabel(r.category)}</span></span></td>
         <td>${companionsHtml}</td>
         <td>${escapeHtml(r.email||'')}</td>
-        <td>${tickets.length} Ticket(s)${checkedInCount ? ` · <span class="badge in">${checkedInCount} eingecheckt</span>` : ''}</td>
+        <td>${ticketsHtml}</td>
         <td>
           ${r.paid
             ? `<span class="badge in">Bezahlt</span>`
             : `<button class="pay-btn" data-id="${r.id}">Als bezahlt markieren</button>`}
+          ${r.paid ? `<button class="pdf-btn" data-id="${r.id}" title="Tickets als PDF herunterladen">📄 PDF</button>` : ''}
         </td>
         <td><button class="delete-btn" data-id="${r.id}" title="Bestellung löschen">🗑</button></td>
       </tr>`;
@@ -377,6 +434,48 @@
     tbody.querySelectorAll('.delete-btn').forEach(btn => {
       btn.addEventListener('click', () => deleteRegistration(btn.dataset.id));
     });
+    tbody.querySelectorAll('.checkin-toggle').forEach(btn => {
+      btn.addEventListener('click', () => toggleCheckIn(btn.dataset.ticketId, btn.dataset.state === '1'));
+    });
+    tbody.querySelectorAll('.pdf-btn').forEach(btn => {
+      btn.addEventListener('click', () => downloadTicketsPdf(btn.dataset.id, btn));
+    });
+  }
+
+  async function toggleCheckIn(ticketId, currentlyCheckedIn){
+    await updateDoc(doc(db, 'tickets', ticketId), { checkedIn: !currentlyCheckedIn });
+  }
+
+  async function downloadTicketsPdf(regId, btnEl){
+    const reg = allRegs.find(r => r.id === regId);
+    const tickets = ticketsFor(regId);
+    if(!reg || tickets.length === 0) return;
+
+    btnEl.disabled = true;
+    btnEl.textContent = '⏳ ...';
+    try {
+      const res = await fetch(WORKER_URL + '/generate-pdf', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          attendees: tickets.map(t => ({ name: t.name, ticketId: t.ticketId, category: t.category }))
+        })
+      });
+      if(!res.ok) throw new Error('PDF-Erstellung fehlgeschlagen');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Winterball-Tickets-${reg.name.replace(/\s+/g,'-')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch(err){
+      console.error(err);
+      alert('PDF konnte nicht erstellt werden.');
+    } finally {
+      btnEl.disabled = false;
+      btnEl.textContent = '📄 PDF';
+    }
   }
 
   async function deleteRegistration(regId){
@@ -415,7 +514,8 @@
         body: JSON.stringify({
           email: reg.email,
           ordererName: reg.name,
-          attendees: tickets.map(t => ({ name: t.name, ticketId: t.ticketId, category: t.category }))
+          attendees: tickets.map(t => ({ name: t.name, ticketId: t.ticketId, category: t.category })),
+          useLernSax: shouldUseLernSax(reg.email)
         })
       });
 
@@ -544,6 +644,15 @@
   document.getElementById('opensAtClearBtn').addEventListener('click', async () => {
     await setDoc(doc(db, 'settings', 'opensAt'), { timestamp: null });
     document.getElementById('opensAtInput').value = '';
+  });
+
+  document.getElementById('lernsaxThresholdSaveBtn').addEventListener('click', async () => {
+    const val = Number(document.getElementById('lernsaxThresholdInput').value);
+    if (isNaN(val) || val < 1 || val > 13) { alert('Bitte eine gültige Klassenstufe (1–13) eingeben.'); return; }
+    await setDoc(doc(db, 'settings', 'lernsaxThreshold'), { grade: val });
+    const savedEl = document.getElementById('lernsaxThresholdSaved');
+    savedEl.classList.add('show');
+    setTimeout(() => savedEl.classList.remove('show'), 2000);
   });
 
   document.getElementById('search').addEventListener('input', render);
