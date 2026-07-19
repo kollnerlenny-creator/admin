@@ -79,6 +79,17 @@
     color:#0a0e1a; font-weight:600; font-size:13px; cursor:pointer;
   }
 
+  .settings-toggle-bar{margin-bottom:12px;}
+  #settingsToggleBtn{
+    padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--glass-border);
+    background:rgba(255,255,255,0.05); color:var(--text); cursor:pointer; font-size:13px;
+  }
+  .settings-panel{
+    display:none; flex-direction:column; gap:14px; margin-bottom:20px; padding:16px;
+    background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius);
+  }
+  .settings-panel.show{display:flex;}
+
   .toolbar{display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;}
   .toolbar input{
     flex:1; min-width:180px; padding:10px 14px; background:var(--glass); border:1px solid var(--glass-border);
@@ -189,50 +200,56 @@
     <div class="stat"><div class="num" id="statRevenue">0 €</div><div class="lbl">Umsatz</div></div>
   </div>
 
-  <div class="price-bar">
-    <label for="priceU18Input">Preis U18 (€)</label>
-    <input type="number" id="priceU18Input" min="0" step="0.5" placeholder="z.B. 10">
-    <label for="priceUe18Input">Preis Ü18 (€)</label>
-    <input type="number" id="priceUe18Input" min="0" step="0.5" placeholder="z.B. 15">
-    <button id="priceSaveBtn">Speichern</button>
-    <span class="price-saved" id="priceSaved">Gespeichert ✓</span>
+  <div class="settings-toggle-bar">
+    <button id="settingsToggleBtn">⚙️ Einstellungen</button>
   </div>
 
-  <div class="info-editor">
-    <label for="infoText">Wichtige Infos auf der Anmeldeseite (optional, erscheint dort für alle Gäste)</label>
-    <textarea id="infoText" placeholder="z.B. Dresscode: Elegant. Einlass ab 17:00 Uhr. Fragen an ..."></textarea>
-    <div class="info-editor-actions">
-      <button id="infoSaveBtn">Speichern</button>
-      <span class="price-saved" id="infoSaved">Gespeichert ✓</span>
+  <div class="settings-panel" id="settingsPanel">
+    <div class="price-bar">
+      <label for="priceU18Input">Preis U18 (€)</label>
+      <input type="number" id="priceU18Input" min="0" step="0.5" placeholder="z.B. 10">
+      <label for="priceUe18Input">Preis Ü18 (€)</label>
+      <input type="number" id="priceUe18Input" min="0" step="0.5" placeholder="z.B. 15">
+      <button id="priceSaveBtn">Speichern</button>
+      <span class="price-saved" id="priceSaved">Gespeichert ✓</span>
     </div>
-  </div>
 
-  <div class="info-editor">
-    <label for="opensAtInput">Anmeldebeginn (davor läuft ein Countdown, Formular gesperrt)</label>
-    <input type="datetime-local" id="opensAtInput" style="max-width:240px;">
-    <div class="info-editor-actions">
-      <button id="opensAtSaveBtn">Speichern</button>
-      <button id="opensAtClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Sofort geöffnet</button>
-      <span class="price-saved" id="opensAtSaved">Gespeichert ✓</span>
+    <div class="info-editor">
+      <label for="infoText">Wichtige Infos auf der Anmeldeseite (optional, erscheint dort für alle Gäste)</label>
+      <textarea id="infoText" placeholder="z.B. Dresscode: Elegant. Einlass ab 17:00 Uhr. Fragen an ..."></textarea>
+      <div class="info-editor-actions">
+        <button id="infoSaveBtn">Speichern</button>
+        <span class="price-saved" id="infoSaved">Gespeichert ✓</span>
+      </div>
     </div>
-  </div>
 
-  <div class="info-editor">
-    <label for="deadlineInput">Anmeldeschluss (danach ist das Formular gesperrt)</label>
-    <input type="datetime-local" id="deadlineInput" style="max-width:240px;">
-    <div class="info-editor-actions">
-      <button id="deadlineSaveBtn">Speichern</button>
-      <button id="deadlineClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Kein Anmeldeschluss</button>
-      <span class="price-saved" id="deadlineSaved">Gespeichert ✓</span>
+    <div class="info-editor">
+      <label for="opensAtInput">Anmeldebeginn (davor läuft ein Countdown, Formular gesperrt)</label>
+      <input type="datetime-local" id="opensAtInput" style="max-width:240px;">
+      <div class="info-editor-actions">
+        <button id="opensAtSaveBtn">Speichern</button>
+        <button id="opensAtClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Sofort geöffnet</button>
+        <span class="price-saved" id="opensAtSaved">Gespeichert ✓</span>
+      </div>
     </div>
-  </div>
 
-  <div class="info-editor">
-    <label for="lernsaxThresholdInput">LernSax-Versand: Ab dieser Klassenstufe funktioniert der Weltweit-Modus (Mail geht normal raus). Darunter wird automatisch über deine eigene LernSax-Adresse verschickt.</label>
-    <input type="number" id="lernsaxThresholdInput" min="1" max="13" style="max-width:120px;" placeholder="z.B. 9">
-    <div class="info-editor-actions">
-      <button id="lernsaxThresholdSaveBtn">Speichern</button>
-      <span class="price-saved" id="lernsaxThresholdSaved">Gespeichert ✓</span>
+    <div class="info-editor">
+      <label for="deadlineInput">Anmeldeschluss (danach ist das Formular gesperrt)</label>
+      <input type="datetime-local" id="deadlineInput" style="max-width:240px;">
+      <div class="info-editor-actions">
+        <button id="deadlineSaveBtn">Speichern</button>
+        <button id="deadlineClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Kein Anmeldeschluss</button>
+        <span class="price-saved" id="deadlineSaved">Gespeichert ✓</span>
+      </div>
+    </div>
+
+    <div class="info-editor">
+      <label for="lernsaxThresholdInput">LernSax-Versand: Ab dieser Klassenstufe funktioniert der Weltweit-Modus (Mail geht normal raus). Darunter wird automatisch über deine eigene LernSax-Adresse verschickt.</label>
+      <input type="number" id="lernsaxThresholdInput" min="1" max="13" style="max-width:120px;" placeholder="z.B. 9">
+      <div class="info-editor-actions">
+        <button id="lernsaxThresholdSaveBtn">Speichern</button>
+        <span class="price-saved" id="lernsaxThresholdSaved">Gespeichert ✓</span>
+      </div>
     </div>
   </div>
 
@@ -264,7 +281,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Besteller</th><th>Begleitungen</th><th>E-Mail</th><th>Tickets / Check-in</th><th>Bezahlt</th><th></th></tr>
+        <tr><th>Besteller</th><th>Begleitungen</th><th>E-Mail</th><th>Tickets / Check-in</th><th>Bezahlt</th><th>Zeiten</th><th></th></tr>
       </thead>
       <tbody id="tableBody"></tbody>
     </table>
@@ -330,6 +347,10 @@
   });
 
   document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
+
+  document.getElementById('settingsToggleBtn').addEventListener('click', () => {
+    document.getElementById('settingsPanel').classList.toggle('show');
+  });
 
   function startListening(){
     onSnapshot(query(collection(db, 'registrations'), orderBy('createdAt', 'desc')), (snap) => {
@@ -415,6 +436,10 @@
             : `<button class="pay-btn" data-id="${r.id}">Als bezahlt markieren</button>`}
           ${r.paid ? `<button class="pdf-btn" data-id="${r.id}" title="Tickets als PDF herunterladen">📄 PDF</button>` : ''}
         </td>
+        <td style="font-size:11px; color:var(--text-dim); white-space:nowrap;">
+          <div>Angemeldet:<br>${formatTimestamp(r.createdAt)}</div>
+          ${r.paid ? `<div style="margin-top:6px;">Bezahlt:<br>${formatTimestamp(r.paidAt)}</div>` : ''}
+        </td>
         <td><button class="delete-btn" data-id="${r.id}" title="Bestellung löschen">🗑</button></td>
       </tr>`;
     }).join('');
@@ -495,6 +520,13 @@
     return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
+  function formatTimestamp(ts){
+    if (!ts || !ts.toDate) return '–';
+    return ts.toDate().toLocaleString('de-DE', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+  }
+
   async function markAsPaid(regId, btnEl){
     btnEl.disabled = true;
     btnEl.textContent = 'Wird verarbeitet...';
@@ -504,7 +536,7 @@
 
     try {
       const batch = writeBatch(db);
-      batch.update(doc(db, 'registrations', regId), { paid: true });
+      batch.update(doc(db, 'registrations', regId), { paid: true, paidAt: serverTimestamp() });
       tickets.forEach(t => batch.update(doc(db, 'tickets', t.id), { paid: true }));
       await batch.commit();
 
@@ -658,9 +690,10 @@
   document.getElementById('search').addEventListener('input', render);
 
   document.getElementById('exportBtn').addEventListener('click', () => {
-    const header = ['Besteller','Begleitungen','E-Mail','Tickets gesamt','Bezahlt'];
+    const header = ['Besteller','Begleitungen','E-Mail','Tickets gesamt','Bezahlt','Angemeldet am','Bezahlt am'];
     const rows = allRegs.map(r => [
-      r.name, (r.companions||[]).map(c => `${c.name} (${categoryLabel(c.category)})`).join('; '), r.email, ticketsFor(r.id).length, r.paid ? 'ja':'nein'
+      r.name, (r.companions||[]).map(c => `${c.name} (${categoryLabel(c.category)})`).join('; '), r.email,
+      ticketsFor(r.id).length, r.paid ? 'ja':'nein', formatTimestamp(r.createdAt), r.paid ? formatTimestamp(r.paidAt) : ''
     ]);
     const csv = [header, ...rows].map(row => row.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
