@@ -194,6 +194,16 @@
     </div>
   </div>
 
+  <div class="info-editor">
+    <label for="deadlineInput">Anmeldeschluss (danach ist das Formular gesperrt)</label>
+    <input type="datetime-local" id="deadlineInput" style="max-width:240px;">
+    <div class="info-editor-actions">
+      <button id="deadlineSaveBtn">Speichern</button>
+      <button id="deadlineClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Kein Anmeldeschluss</button>
+      <span class="price-saved" id="deadlineSaved">Gespeichert ✓</span>
+    </div>
+  </div>
+
   <div class="toolbar">
     <input type="text" id="search" placeholder="Nach Name oder E-Mail suchen...">
     <button id="addBtn">+ Bestellung hinzufügen</button>
@@ -288,6 +298,16 @@
     onSnapshot(doc(db, 'settings', 'info'), (snap) => {
       document.getElementById('infoText').value = snap.exists() ? (snap.data().text || '') : '';
     });
+    onSnapshot(doc(db, 'settings', 'deadline'), (snap) => {
+      const iso = snap.exists() ? snap.data().timestamp : null;
+      document.getElementById('deadlineInput').value = iso ? isoToLocalInputValue(iso) : '';
+    });
+  }
+
+  function isoToLocalInputValue(iso){
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   function ticketsFor(regId){
@@ -480,6 +500,21 @@
     const savedEl = document.getElementById('infoSaved');
     savedEl.classList.add('show');
     setTimeout(() => savedEl.classList.remove('show'), 2000);
+  });
+
+  document.getElementById('deadlineSaveBtn').addEventListener('click', async () => {
+    const val = document.getElementById('deadlineInput').value;
+    if (!val) { alert('Bitte ein Datum/Uhrzeit wählen oder "Kein Anmeldeschluss" nutzen.'); return; }
+    const iso = new Date(val).toISOString();
+    await setDoc(doc(db, 'settings', 'deadline'), { timestamp: iso });
+    const savedEl = document.getElementById('deadlineSaved');
+    savedEl.classList.add('show');
+    setTimeout(() => savedEl.classList.remove('show'), 2000);
+  });
+
+  document.getElementById('deadlineClearBtn').addEventListener('click', async () => {
+    await setDoc(doc(db, 'settings', 'deadline'), { timestamp: null });
+    document.getElementById('deadlineInput').value = '';
   });
 
   document.getElementById('search').addEventListener('input', render);
