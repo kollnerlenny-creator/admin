@@ -62,6 +62,23 @@
   .price-saved{color:var(--success); font-size:12px; opacity:0; transition:opacity 0.3s;}
   .price-saved.show{opacity:1;}
 
+  .info-editor{
+    margin-bottom:20px; padding:14px 16px;
+    background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius-sm);
+    backdrop-filter:blur(16px);
+  }
+  .info-editor label{display:block; font-size:12px; color:var(--text-dim); margin-bottom:8px;}
+  .info-editor textarea{
+    width:100%; min-height:70px; padding:10px 12px; background:rgba(255,255,255,0.05);
+    border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text);
+    font-size:13px; font-family:inherit; resize:vertical;
+  }
+  .info-editor-actions{display:flex; align-items:center; gap:10px; margin-top:10px;}
+  .info-editor-actions button{
+    padding:8px 14px; border-radius:var(--radius-sm); border:none; background:var(--accent);
+    color:#0a0e1a; font-weight:600; font-size:13px; cursor:pointer;
+  }
+
   .toolbar{display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;}
   .toolbar input{
     flex:1; min-width:180px; padding:10px 14px; background:var(--glass); border:1px solid var(--glass-border);
@@ -168,6 +185,15 @@
     <span class="price-saved" id="priceSaved">Gespeichert ✓</span>
   </div>
 
+  <div class="info-editor">
+    <label for="infoText">Wichtige Infos auf der Anmeldeseite (optional, erscheint dort für alle Gäste)</label>
+    <textarea id="infoText" placeholder="z.B. Dresscode: Elegant. Einlass ab 17:00 Uhr. Fragen an ..."></textarea>
+    <div class="info-editor-actions">
+      <button id="infoSaveBtn">Speichern</button>
+      <span class="price-saved" id="infoSaved">Gespeichert ✓</span>
+    </div>
+  </div>
+
   <div class="toolbar">
     <input type="text" id="search" placeholder="Nach Name oder E-Mail suchen...">
     <button id="addBtn">+ Bestellung hinzufügen</button>
@@ -258,6 +284,9 @@
       document.getElementById('priceU18Input').value = ticketPrices.u18 || '';
       document.getElementById('priceUe18Input').value = ticketPrices.ue18 || '';
       render();
+    });
+    onSnapshot(doc(db, 'settings', 'info'), (snap) => {
+      document.getElementById('infoText').value = snap.exists() ? (snap.data().text || '') : '';
     });
   }
 
@@ -352,7 +381,7 @@
         body: JSON.stringify({
           email: reg.email,
           ordererName: reg.name,
-          attendees: tickets.map(t => ({ name: t.name, ticketId: t.ticketId }))
+          attendees: tickets.map(t => ({ name: t.name, ticketId: t.ticketId, category: t.category }))
         })
       });
 
@@ -441,6 +470,14 @@
     if (isNaN(u18) || isNaN(ue18) || u18 < 0 || ue18 < 0) { alert('Bitte gültige Preise eingeben.'); return; }
     await setDoc(doc(db, 'settings', 'pricing'), { u18, ue18 });
     const savedEl = document.getElementById('priceSaved');
+    savedEl.classList.add('show');
+    setTimeout(() => savedEl.classList.remove('show'), 2000);
+  });
+
+  document.getElementById('infoSaveBtn').addEventListener('click', async () => {
+    const text = document.getElementById('infoText').value.trim();
+    await setDoc(doc(db, 'settings', 'info'), { text });
+    const savedEl = document.getElementById('infoSaved');
     savedEl.classList.add('show');
     setTimeout(() => savedEl.classList.remove('show'), 2000);
   });
