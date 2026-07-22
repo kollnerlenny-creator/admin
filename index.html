@@ -131,6 +131,26 @@
     align-self:flex-start; background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; padding:4px 0;
   }
 
+  .schedule-list{display:flex; flex-direction:column; gap:8px; margin-bottom:6px;}
+  .schedule-row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .schedule-row input{
+    padding:8px 10px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border);
+    border-radius:var(--radius-sm); color:var(--text); font-size:13px; font-family:inherit;
+  }
+  .schedule-row input.schedule-time{flex:0 0 76px;}
+  .schedule-row input.schedule-label{flex:1 1 160px; min-width:140px;}
+  .schedule-row input.schedule-note{flex:1 1 220px; min-width:180px;}
+  .schedule-row-actions{display:flex; gap:4px; flex-shrink:0;}
+  .schedule-row-actions button{
+    width:30px; height:34px; border-radius:var(--radius-sm); border:1px solid var(--glass-border);
+    background:rgba(255,255,255,0.05); color:var(--text); cursor:pointer; font-size:13px;
+  }
+  .schedule-row-actions button:disabled{opacity:0.3; cursor:default;}
+  .schedule-row-actions button.remove{border-color:rgba(255,128,128,0.3); background:rgba(255,128,128,0.1); color:var(--error);}
+  #scheduleAddBtn{
+    align-self:flex-start; background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; padding:4px 0;
+  }
+
   table{width:100%; border-collapse:collapse; font-size:13px;}
   thead th{
     text-align:left; padding:10px 12px; color:var(--text-dim); font-weight:500;
@@ -251,6 +271,16 @@
         <span class="price-saved" id="lernsaxThresholdSaved">Gespeichert ✓</span>
       </div>
     </div>
+
+    <div class="info-editor">
+      <label>Ablaufplan des Abends (erscheint als Zeitstrahl "Ablauf" auf der Winterball-Seite)</label>
+      <div class="schedule-list" id="scheduleList"></div>
+      <button type="button" id="scheduleAddBtn">+ Programmpunkt hinzufügen</button>
+      <div class="info-editor-actions">
+        <button id="scheduleSaveBtn">Speichern</button>
+        <span class="price-saved" id="scheduleSaved">Gespeichert ✓</span>
+      </div>
+    </div>
   </div>
 
   <div class="toolbar">
@@ -317,6 +347,15 @@
   let allTickets = [];
   let ticketPrices = { u18: 0, ue18: 0 };
   let lernsaxThreshold = null;
+  let scheduleLoaded = false;
+
+  const DEFAULT_SCHEDULE = [
+    { time: '17:30', label: 'Einlass', note: 'Ankommen, Garderobe, erste Getränke' },
+    { time: '18:00', label: 'Eröffnung', note: 'Begrüßung und Auftakt des Abends' },
+    { time: '18:30', label: 'Buffet', note: 'Gemeinsames Essen' },
+    { time: '20:00', label: 'Tanz & Programm', note: 'Musik, Überraschungen, gute Laune' },
+    { time: '23:00', label: 'Ausklang', note: 'Gemütlicher Ausklang des Abends' },
+  ];
 
   // Berechnet die Klassenstufe aus dem Einschulungsjahr am Ende der LernSax-Adresse
   // (Muster: nachname+vorname-kürzel+einschulungsjahr@schule.lernsax.de)
@@ -409,6 +448,15 @@
       const grade = snap.exists() ? snap.data().grade : null;
       document.getElementById('lernsaxThresholdInput').value = grade || '';
       lernsaxThreshold = grade || null;
+    });
+    onSnapshot(doc(db, 'settings', 'schedule'), (snap) => {
+      // Nur beim allerersten Laden rendern, damit ein laufender Bearbeitungsvorgang
+      // (z.B. neue, noch leere Zeile) nicht durch den Snapshot überschrieben wird.
+      if (scheduleLoaded) return;
+      scheduleLoaded = true;
+      const items = (snap.exists() && Array.isArray(snap.data().items) && snap.data().items.length)
+        ? snap.data().items : DEFAULT_SCHEDULE;
+      renderScheduleRows(items);
     });
   }
 
@@ -684,6 +732,58 @@
     if (isNaN(u18) || isNaN(ue18) || u18 < 0 || ue18 < 0) { alert('Bitte gültige Preise eingeben.'); return; }
     await setDoc(doc(db, 'settings', 'pricing'), { u18, ue18 });
     const savedEl = document.getElementById('priceSaved');
+    savedEl.classList.add('show');
+    setTimeout(() => savedEl.classList.remove('show'), 2000);
+  });
+
+  // --- Ablaufplan ---
+  const scheduleList = document.getElementById('scheduleList');
+
+  function addScheduleRow(item = { time: '', label: '', note: '' }){
+    const row = document.createElement('div');
+    row.className = 'schedule-row';
+    row.innerHTML = `
+      <input type="text" class="schedule-time" placeholder="17:30" value="${escapeHtml(item.time || '')}">
+      <input type="text" class="schedule-label" placeholder="Programmpunkt (z.B. Einlass)" value="${escapeHtml(item.label || '')}">
+      <input type="text" class="schedule-note" placeholder="Beschreibung (optional)" value="${escapeHtml(item.note || '')}">
+      <div class="schedule-row-actions">
+        <button type="button" class="up" title="Nach oben">↑</button>
+        <button type="button" class="down" title="Nach unten">↓</button>
+        <button type="button" class="remove" title="Entfernen">×</button>
+      </div>`;
+    row.querySelector('.up').addEventListener('click', () => {
+      const prev = row.previousElementSibling;
+      if (prev) scheduleList.insertBefore(row, prev);
+    });
+    row.querySelector('.down').addEventListener('click', () => {
+      const next = row.nextElementSibling;
+      if (next) scheduleList.insertBefore(next, row);
+    });
+    row.querySelector('.remove').addEventListener('click', () => row.remove());
+    scheduleList.appendChild(row);
+  }
+
+  function renderScheduleRows(items){
+    scheduleList.innerHTML = '';
+    items.forEach(item => addScheduleRow(item));
+  }
+
+  document.getElementById('scheduleAddBtn').addEventListener('click', () => addScheduleRow());
+
+  document.getElementById('scheduleSaveBtn').addEventListener('click', async () => {
+    const items = Array.from(scheduleList.querySelectorAll('.schedule-row')).map(row => ({
+      time: row.querySelector('.schedule-time').value.trim(),
+      label: row.querySelector('.schedule-label').value.trim(),
+      note: row.querySelector('.schedule-note').value.trim(),
+    })).filter(it => it.time || it.label);
+
+    if (items.some(it => !it.time || !it.label)) {
+      alert('Bitte bei jedem Programmpunkt mindestens Uhrzeit und Titel ausfüllen (oder die Zeile entfernen).');
+      return;
+    }
+
+    await setDoc(doc(db, 'settings', 'schedule'), { items });
+    const savedEl = document.getElementById('scheduleSaved');
     savedEl.classList.add('show');
     setTimeout(() => savedEl.classList.remove('show'), 2000);
   });
