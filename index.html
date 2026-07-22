@@ -512,7 +512,10 @@
           attendees: tickets.map(t => ({ name: t.name, ticketId: t.ticketId, category: t.category }))
         })
       });
-      if(!res.ok) throw new Error('PDF-Erstellung fehlgeschlagen');
+      if(!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `PDF-Erstellung fehlgeschlagen (Status ${res.status})`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -522,7 +525,7 @@
       URL.revokeObjectURL(url);
     } catch(err){
       console.error(err);
-      alert('PDF konnte nicht erstellt werden.');
+      alert('PDF konnte nicht erstellt werden:\n' + err.message);
     } finally {
       btnEl.disabled = false;
       btnEl.textContent = '📄 PDF';
