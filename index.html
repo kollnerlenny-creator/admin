@@ -151,6 +151,12 @@
     align-self:flex-start; background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; padding:4px 0;
   }
 
+  .danger-btn{
+    padding:8px 14px; border-radius:var(--radius-sm); border:1px solid rgba(255,128,128,0.4);
+    background:rgba(255,128,128,0.1); color:var(--error); font-weight:600; font-size:13px; cursor:pointer;
+  }
+  .danger-btn:hover{background:rgba(255,128,128,0.2);}
+
   table{width:100%; border-collapse:collapse; font-size:13px;}
   thead th{
     text-align:left; padding:10px 12px; color:var(--text-dim); font-weight:500;
@@ -218,6 +224,7 @@
     <div class="stat"><div class="num" id="statPaid">0</div><div class="lbl">Bezahlt</div></div>
     <div class="stat"><div class="num" id="statCheckedIn">0</div><div class="lbl">Eingecheckt</div></div>
     <div class="stat"><div class="num" id="statRevenue">0 €</div><div class="lbl">Umsatz</div></div>
+    <div class="stat"><div class="num" id="statU18Ratio">0 / 0</div><div class="lbl">U18 / Ü18</div></div>
   </div>
 
   <div class="settings-toggle-bar">
@@ -279,6 +286,18 @@
       <div class="info-editor-actions">
         <button id="scheduleSaveBtn">Speichern</button>
         <span class="price-saved" id="scheduleSaved">Gespeichert ✓</span>
+      </div>
+    </div>
+
+    <div class="info-editor">
+      <label>Datenschutz — ihr speichert Name, E-Mail, Altersgruppe (U18/Ü18) und Ticket-ID von
+        Schüler:innen. Das sind personenbezogene Daten Minderjähriger. Bitte nach der Veranstaltung
+        zeitnah löschen (empfohlen: spätestens 30 Tage danach, sofern keine Buchhaltungspflicht
+        entgegensteht). Die <a href="datenschutz.html" target="_blank" style="color:var(--accent);">Datenschutzerklärung</a>
+        ist auf der Anmeldeseite verlinkt und muss vor jeder Anmeldung bestätigt werden.
+      </label>
+      <div class="info-editor-actions">
+        <button type="button" id="deleteAllDataBtn" class="danger-btn">⚠️ Alle Bestellungs- und Ticketdaten jetzt endgültig löschen</button>
       </div>
     </div>
   </div>
@@ -526,6 +545,9 @@
       .filter(t => t.paid)
       .reduce((sum, t) => sum + (t.category === 'u18' ? ticketPrices.u18 : ticketPrices.ue18), 0);
     document.getElementById('statRevenue').textContent = revenue.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
+    const u18Count = allTickets.filter(t => t.category === 'u18').length;
+    const ue18Count = allTickets.filter(t => t.category === 'ue18').length;
+    document.getElementById('statU18Ratio').textContent = `${u18Count} / ${ue18Count}`;
 
     tbody.querySelectorAll('.pay-btn').forEach(btn => {
       btn.addEventListener('click', () => markAsPaid(btn.dataset.id, btn));
@@ -833,6 +855,44 @@
     const savedEl = document.getElementById('lernsaxThresholdSaved');
     savedEl.classList.add('show');
     setTimeout(() => savedEl.classList.remove('show'), 2000);
+  });
+
+  document.getElementById('deleteAllDataBtn').addEventListener('click', async () => {
+    if (allRegs.length === 0) { alert('Es sind aktuell keine Bestellungen vorhanden.'); return; }
+
+    const step1 = confirm(
+      `Wirklich ALLE ${allRegs.length} Bestellungen und ${allTickets.length} Tickets unwiderruflich löschen?\n\n` +
+      `Das betrifft alle Namen, E-Mails und Ticket-Daten. Diese Aktion kann NICHT rückgängig gemacht werden.`
+    );
+    if (!step1) return;
+
+    const typed = prompt('Zur Sicherheit: Tippe "LÖSCHEN" (in Großbuchstaben) ein, um fortzufahren.');
+    if (typed !== 'LÖSCHEN') { alert('Abgebrochen — Eingabe stimmte nicht überein.'); return; }
+
+    const btn = document.getElementById('deleteAllDataBtn');
+    btn.disabled = true;
+    btn.textContent = 'Wird gelöscht...';
+
+    try {
+      // Firestore erlaubt max. 500 Schreiboperationen pro Batch, daher in Häppchen aufteilen.
+      const allDocs = [
+        ...allRegs.map(r => doc(db, 'registrations', r.id)),
+        ...allTickets.map(t => doc(db, 'tickets', t.id)),
+      ];
+      const chunkSize = 400;
+      for (let i = 0; i < allDocs.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        allDocs.slice(i, i + chunkSize).forEach(ref => batch.delete(ref));
+        await batch.commit();
+      }
+      alert('Alle Bestellungs- und Ticketdaten wurden gelöscht.');
+    } catch (err) {
+      console.error(err);
+      alert('Beim Löschen ist ein Fehler aufgetreten. Bitte Konsole prüfen.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '⚠️ Alle Bestellungs- und Ticketdaten jetzt endgültig löschen';
+    }
   });
 
   document.getElementById('search').addEventListener('input', render);
