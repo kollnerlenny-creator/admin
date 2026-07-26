@@ -367,6 +367,21 @@
   let ticketPrices = { u18: 0, ue18: 0 };
   let lernsaxThreshold = null;
   let scheduleLoaded = false;
+  let statsSyncTimer = null;
+
+  // Hält den öffentlichen Live-Ticketzähler (settings/stats) mit der echten Anzahl
+  // Tickets synchron — legt das Dokument beim allerersten Mal auch gleich an.
+  // Debounced, damit nicht bei jeder einzelnen Änderung sofort geschrieben wird.
+  function syncStatsCounter(){
+    clearTimeout(statsSyncTimer);
+    statsSyncTimer = setTimeout(async () => {
+      try {
+        await setDoc(doc(db, 'settings', 'stats'), { ticketCount: allTickets.length }, { merge: true });
+      } catch (err) {
+        console.error('Ticketzähler konnte nicht synchronisiert werden:', err);
+      }
+    }, 1500);
+  }
 
   const DEFAULT_SCHEDULE = [
     { time: '17:30', label: 'Einlass', note: 'Ankommen, Garderobe, erste Getränke' },
@@ -444,6 +459,7 @@
     onSnapshot(collection(db, 'tickets'), (snap) => {
       allTickets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       render();
+      syncStatsCounter();
     });
     onSnapshot(doc(db, 'settings', 'pricing'), (snap) => {
       const data = snap.exists() ? snap.data() : {};
@@ -862,7 +878,8 @@
 
     const step1 = confirm(
       `Wirklich ALLE ${allRegs.length} Bestellungen und ${allTickets.length} Tickets unwiderruflich löschen?\n\n` +
-      `Das betrifft alle Namen, E-Mails und Ticket-Daten. Diese Aktion kann NICHT rückgängig gemacht werden.`
+      `Vor dem Löschen wird automatisch ein CSV-Backup heruntergeladen. Das eigentliche Löschen ` +
+      `aus Firestore kann danach NICHT rückgängig gemacht werden.`
     );
     if (!step1) return;
 
@@ -871,6 +888,14 @@
 
     const btn = document.getElementById('deleteAllDataBtn');
     btn.disabled = true;
+    btn.textContent = 'Erstelle Sicherheitskopie...';
+
+    // Sicherheitsnetz: vor dem endgültigen Löschen automatisch ein CSV-Backup
+    // herunterladen, falls doch mal was schiefgeht oder es aus Versehen passiert.
+    const stamp = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+    exportCsv(`winterball-backup-vor-loeschung_${stamp}.csv`);
+    await new Promise(r => setTimeout(r, 400)); // kurz warten, damit der Download sicher startet
+
     btn.textContent = 'Wird gelöscht...';
 
     try {
@@ -885,7 +910,7 @@
         allDocs.slice(i, i + chunkSize).forEach(ref => batch.delete(ref));
         await batch.commit();
       }
-      alert('Alle Bestellungs- und Ticketdaten wurden gelöscht.');
+      alert('Alle Bestellungs- und Ticketdaten wurden gelöscht. Ein Backup liegt in deinem Downloads-Ordner.');
     } catch (err) {
       console.error(err);
       alert('Beim Löschen ist ein Fehler aufgetreten. Bitte Konsole prüfen.');
@@ -897,7 +922,7 @@
 
   document.getElementById('search').addEventListener('input', render);
 
-  document.getElementById('exportBtn').addEventListener('click', () => {
+  function exportCsv(filename){
     const header = ['Besteller','Begleitungen','E-Mail','Tickets gesamt','Bezahlt','Angemeldet am','Bezahlt am'];
     const rows = allRegs.map(r => [
       r.name, (r.companions||[]).map(c => `${c.name} (${categoryLabel(c.category)})`).join('; '), r.email,
@@ -907,8 +932,12 @@
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'winterball-bestellungen.csv'; a.click();
+    a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
+  }
+
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    exportCsv('winterball-bestellungen.csv');
   });
 </script>
 </body>
