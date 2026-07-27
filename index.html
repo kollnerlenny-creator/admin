@@ -229,11 +229,11 @@
     border:1px solid var(--glass-border); background:rgba(255,255,255,0.05); color:var(--text-dim);
   }
   .checkin-toggle.in{border-color:rgba(127,224,168,0.4); background:rgba(127,224,168,0.12); color:var(--success);}
-  .pdf-btn{
+  .pdf-btn, .invoice-btn{
     margin-left:8px; padding:5px 10px; border-radius:20px; border:1px solid var(--glass-border);
     background:rgba(255,255,255,0.05); color:var(--text); font-size:11px; cursor:pointer;
   }
-  .pdf-btn:hover{background:rgba(255,255,255,0.1);}
+  .pdf-btn:hover, .invoice-btn:hover{background:rgba(255,255,255,0.1);}
   .table-wrap{
     background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius);
     overflow-x:auto; backdrop-filter:blur(16px);
@@ -404,7 +404,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, doc, writeBatch, onSnapshot, query, where, orderBy, updateDoc, deleteDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, doc, getDoc, writeBatch, onSnapshot, query, where, orderBy, updateDoc, deleteDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
   import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
   const firebaseConfig = {
@@ -759,6 +759,7 @@
             ? `<span class="badge in">Bezahlt</span>`
             : `<button class="pay-btn" data-id="${r.id}">Als bezahlt markieren</button>`}
           ${r.paid ? `<button class="pdf-btn" data-id="${r.id}" title="Tickets als PDF herunterladen">📄 PDF</button>` : ''}
+          ${r.paid ? `<button class="invoice-btn" data-id="${r.id}" title="Rechnung als PDF herunterladen">🧾 Rechnung</button>` : ''}
         </td>
         <td style="font-size:11px; color:var(--text-dim); white-space:nowrap;">
           <div>Angemeldet:<br>${formatTimestamp(r.createdAt)}</div>
@@ -791,6 +792,9 @@
     });
     tbody.querySelectorAll('.pdf-btn').forEach(btn => {
       btn.addEventListener('click', () => downloadTicketsPdf(btn.dataset.id, btn));
+    });
+    tbody.querySelectorAll('.invoice-btn').forEach(btn => {
+      btn.addEventListener('click', () => downloadInvoicePdf(btn.dataset.id, btn));
     });
   }
 
@@ -833,6 +837,50 @@
     }
   }
 
+  async function downloadInvoicePdf(regId, btnEl){
+    const reg = allRegs.find(r => r.id === regId);
+    const tickets = ticketsFor(regId);
+    if(!reg || tickets.length === 0) return;
+
+    btnEl.disabled = true;
+    btnEl.textContent = '⏳ ...';
+    try {
+      // Immer die aktuell gültigen Preise nutzen (nicht auf lokalen Cache verlassen)
+      const priceSnap = await getDoc(doc(db, 'settings', 'pricing'));
+      const freshPrices = priceSnap.exists()
+        ? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
+        : { u18: 0, ue18: 0 };
+
+      const res = await fetch(WORKER_URL + '/generate-invoice', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          ordererName: reg.name,
+          attendees: tickets.map(t => ({
+            name: t.name, category: t.category, price: freshPrices[t.category] || 0
+          }))
+        })
+      });
+      if(!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Rechnung konnte nicht erstellt werden (Status ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Winterball-Rechnung-${reg.name.replace(/\s+/g,'-')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch(err){
+      console.error(err);
+      alert('Rechnung konnte nicht erstellt werden:\n' + err.message);
+    } finally {
+      btnEl.disabled = false;
+      btnEl.textContent = '🧾 Rechnung';
+    }
+  }
+
   async function deleteRegistration(regId){
     const reg = allRegs.find(r => r.id === regId);
     if(!reg) return;
@@ -870,6 +918,13 @@
       tickets.forEach(t => batch.update(doc(db, 'tickets', t.id), { paid: true }));
       await batch.commit();
 
+      // Preise IMMER frisch aus Firestore holen (nicht den evtl. veralteten
+      // lokalen Cache nutzen) — verhindert 0€-Rechnungen durch Timing-Probleme.
+      const priceSnap = await getDoc(doc(db, 'settings', 'pricing'));
+      const freshPrices = priceSnap.exists()
+        ? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
+        : { u18: 0, ue18: 0 };
+
       const res = await fetch(WORKER_URL + '/send-tickets', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
@@ -878,7 +933,7 @@
           ordererName: reg.name,
           attendees: tickets.map(t => ({
             name: t.name, ticketId: t.ticketId, category: t.category,
-            price: ticketPrices[t.category] || 0
+            price: freshPrices[t.category] || 0
           })),
           useLernSax: shouldUseLernSax(reg.email)
         })
