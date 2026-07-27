@@ -79,16 +79,25 @@
     color:#0a0e1a; font-weight:600; font-size:13px; cursor:pointer;
   }
 
-  .settings-toggle-bar{margin-bottom:12px;}
-  #settingsToggleBtn{
-    padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--glass-border);
-    background:rgba(255,255,255,0.05); color:var(--text); cursor:pointer; font-size:13px;
+  .tabs{display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--glass-border); flex-wrap:wrap;}
+  .tab-btn{
+    padding:12px 18px; border:none; background:none; color:var(--text-dim); font-size:14px; font-weight:600;
+    cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color 0.2s, border-color 0.2s;
   }
-  .settings-panel{
-    display:none; flex-direction:column; gap:14px; margin-bottom:20px; padding:16px;
-    background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius);
+  .tab-btn:hover{color:var(--text);}
+  .tab-btn.active{color:var(--accent); border-bottom-color:var(--accent);}
+  .tab-content{display:none;}
+  .tab-content.active{display:block;}
+
+  .insights-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px;}
+  .insight-card{
+    background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius);
+    padding:18px; backdrop-filter:blur(16px);
   }
-  .settings-panel.show{display:flex;}
+  .insight-card.wide{grid-column:1 / -1;}
+  .insight-title{font-size:13px; color:var(--text-dim); margin-bottom:14px; font-weight:600;}
+  .insight-card canvas{max-height:240px;}
+  .insight-empty{color:var(--text-dim); font-size:13px; text-align:center; padding:30px 0;}
 
   .toolbar{display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;}
   .toolbar input{
@@ -117,6 +126,33 @@
   .companion-add-row{display:flex; gap:8px;}
   .companion-add-row input{flex:1;}
   .companion-add-row select{flex:0 0 90px; padding:10px 8px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:13px;}
+
+  /* Custom-Dropdown statt nativer Browser-Auswahlliste */
+  .cs-wrap{position:relative;}
+  .cs-wrap select{
+    position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; padding:0; border:none;
+  }
+  .cs-trigger{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:10px 12px; font-size:13px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border);
+    border-radius:var(--radius-sm); color:var(--text); cursor:pointer; user-select:none;
+    transition:border-color 0.2s, background 0.2s;
+  }
+  .cs-trigger.placeholder{color:var(--text-dim);}
+  .cs-wrap.open .cs-trigger{border-color:var(--accent); background:rgba(255,255,255,0.08);}
+  .cs-arrow{width:7px; height:7px; border-right:2px solid var(--text-dim); border-bottom:2px solid var(--text-dim);
+    transform:rotate(45deg); transition:transform 0.2s; flex-shrink:0; margin-top:-3px;}
+  .cs-wrap.open .cs-arrow{transform:rotate(-135deg); margin-top:3px;}
+  .cs-panel{
+    position:absolute; left:0; right:0; top:calc(100% + 6px); z-index:80;
+    background:rgba(19,28,48,0.98); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    border:1px solid var(--glass-border); border-radius:var(--radius-sm); overflow:hidden;
+    box-shadow:0 16px 40px rgba(0,0,0,0.5); max-height:220px; overflow-y:auto;
+    display:none; opacity:0; transform:translateY(-4px); transition:opacity 0.15s, transform 0.15s;
+  }
+  .cs-wrap.open .cs-panel{display:block; opacity:1; transform:translateY(0);}
+  .cs-option{padding:10px 12px; font-size:13px; color:var(--text); cursor:pointer;}
+  .cs-option:hover, .cs-option.active{background:rgba(143,180,255,0.15);}
   .companion-add-row button{
     width:36px; border-radius:var(--radius-sm); border:1px solid rgba(255,128,128,0.3);
     background:rgba(255,128,128,0.1); color:var(--error); cursor:pointer;
@@ -203,6 +239,7 @@
     overflow-x:auto; backdrop-filter:blur(16px);
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -227,11 +264,73 @@
     <div class="stat"><div class="num" id="statU18Ratio">0 / 0</div><div class="lbl">U18 / Ü18</div></div>
   </div>
 
-  <div class="settings-toggle-bar">
-    <button id="settingsToggleBtn">⚙️ Einstellungen</button>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="orders">Bestellungen</button>
+    <button class="tab-btn" data-tab="insights">Insights</button>
+    <button class="tab-btn" data-tab="settings">⚙️ Einstellungen</button>
   </div>
 
-  <div class="settings-panel" id="settingsPanel">
+  <!-- Tab: Bestellungen -->
+  <div class="tab-content active" data-tab-content="orders">
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Nach Name oder E-Mail suchen...">
+      <button id="addBtn">+ Bestellung hinzufügen</button>
+      <button id="exportBtn">CSV exportieren</button>
+      <button id="logoutBtn">Logout</button>
+    </div>
+
+    <div class="add-form" id="addForm">
+      <div class="add-row">
+        <input type="text" id="addName" placeholder="Name des Bestellers (Vorname Nachname)">
+        <input type="number" id="addKlasse" placeholder="Klasse" min="5" max="12" style="max-width:90px;">
+        <button type="button" id="suggestEmailBtn" style="background:rgba(143,180,255,0.12); border:1px solid rgba(143,180,255,0.35); color:var(--accent-glow); border-radius:var(--radius-sm); padding:10px 14px; font-size:12px; cursor:pointer; white-space:nowrap;">LernSax-Adresse vorschlagen</button>
+      </div>
+      <div class="add-row">
+        <input type="email" id="addEmail" placeholder="E-Mail des Bestellers">
+        <select id="addCategory">
+          <option value="">Alter?</option>
+          <option value="u18">U18</option>
+          <option value="ue18">Ü18</option>
+        </select>
+      </div>
+      <div class="companions-block" id="companionsBlock"></div>
+      <button type="button" id="addCompanionFieldBtn">+ Begleitung hinzufügen</button>
+      <div class="add-form-actions">
+        <button id="addSaveBtn">Anlegen</button>
+        <button id="addCancelBtn" class="secondary">Abbrechen</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Besteller</th><th>Begleitungen</th><th>E-Mail</th><th>Tickets / Check-in</th><th>Bezahlt</th><th>Zeiten</th><th></th></tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab: Insights -->
+  <div class="tab-content" data-tab-content="insights">
+    <div class="insights-grid">
+      <div class="insight-card">
+        <div class="insight-title">U18 / Ü18-Verteilung</div>
+        <canvas id="chartCategory"></canvas>
+      </div>
+      <div class="insight-card">
+        <div class="insight-title">Bezahlt vs. offen</div>
+        <canvas id="chartPaid"></canvas>
+      </div>
+      <div class="insight-card wide">
+        <div class="insight-title">Anmeldungen pro Tag</div>
+        <canvas id="chartDaily"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Einstellungen -->
+  <div class="tab-content" data-tab-content="settings">
     <div class="price-bar">
       <label for="priceU18Input">Preis U18 (€)</label>
       <input type="number" id="priceU18Input" min="0" step="0.5" placeholder="z.B. 10">
@@ -301,44 +400,6 @@
       </div>
     </div>
   </div>
-
-  <div class="toolbar">
-    <input type="text" id="search" placeholder="Nach Name oder E-Mail suchen...">
-    <button id="addBtn">+ Bestellung hinzufügen</button>
-    <button id="exportBtn">CSV exportieren</button>
-    <button id="logoutBtn">Logout</button>
-  </div>
-
-  <div class="add-form" id="addForm">
-    <div class="add-row">
-      <input type="text" id="addName" placeholder="Name des Bestellers (Vorname Nachname)">
-      <input type="number" id="addKlasse" placeholder="Klasse" min="5" max="12" style="max-width:90px;">
-      <button type="button" id="suggestEmailBtn" style="background:rgba(143,180,255,0.12); border:1px solid rgba(143,180,255,0.35); color:var(--accent-glow); border-radius:var(--radius-sm); padding:10px 14px; font-size:12px; cursor:pointer; white-space:nowrap;">LernSax-Adresse vorschlagen</button>
-    </div>
-    <div class="add-row">
-      <input type="email" id="addEmail" placeholder="E-Mail des Bestellers">
-      <select id="addCategory">
-        <option value="">Alter?</option>
-        <option value="u18">U18</option>
-        <option value="ue18">Ü18</option>
-      </select>
-    </div>
-    <div class="companions-block" id="companionsBlock"></div>
-    <button type="button" id="addCompanionFieldBtn">+ Begleitung hinzufügen</button>
-    <div class="add-form-actions">
-      <button id="addSaveBtn">Anlegen</button>
-      <button id="addCancelBtn" class="secondary">Abbrechen</button>
-    </div>
-  </div>
-
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Besteller</th><th>Begleitungen</th><th>E-Mail</th><th>Tickets / Check-in</th><th>Bezahlt</th><th>Zeiten</th><th></th></tr>
-      </thead>
-      <tbody id="tableBody"></tbody>
-    </table>
-  </div>
 </div>
 
 <script type="module">
@@ -362,6 +423,66 @@
   // TODO: Nach dem Worker-Deploy hier die Worker-URL eintragen
   const WORKER_URL = "https://winterball-worker.kollnerlenny.workers.dev";
 
+  // --- Custom-Dropdown: ersetzt <select> visuell durch das Winterball-Design,
+  // das native <select> bleibt (unsichtbar) bestehen, damit der Rest des Codes
+  // ganz normal .value lesen/schreiben und auf 'change' hören kann. ---
+  function enhanceSelect(select){
+    if (!select || select.dataset.csEnhanced) return;
+    select.dataset.csEnhanced = '1';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-wrap';
+    select.parentNode.insertBefore(wrap, select);
+    wrap.appendChild(select);
+
+    const trigger = document.createElement('div');
+    trigger.className = 'cs-trigger';
+    trigger.tabIndex = 0;
+    trigger.innerHTML = '<span class="cs-label"></span><span class="cs-arrow"></span>';
+    const label = trigger.querySelector('.cs-label');
+
+    const panel = document.createElement('div');
+    panel.className = 'cs-panel';
+
+    function renderOptions(){
+      panel.innerHTML = '';
+      Array.from(select.options).forEach(opt => {
+        const o = document.createElement('div');
+        o.className = 'cs-option' + (opt.value === select.value ? ' active' : '');
+        o.textContent = opt.textContent;
+        o.addEventListener('click', () => {
+          select.value = opt.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          syncLabel();
+          close();
+        });
+        panel.appendChild(o);
+      });
+    }
+    function syncLabel(){
+      const opt = select.options[select.selectedIndex];
+      label.textContent = opt ? opt.textContent : '';
+      trigger.classList.toggle('placeholder', !select.value);
+    }
+    function open(){ wrap.classList.add('open'); renderOptions(); document.addEventListener('click', onDocClick); }
+    function close(){ wrap.classList.remove('open'); document.removeEventListener('click', onDocClick); }
+    function onDocClick(e){ if (!wrap.contains(e.target)) close(); }
+
+    trigger.addEventListener('click', () => { wrap.classList.contains('open') ? close() : open(); });
+    trigger.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); wrap.classList.contains('open') ? close() : open(); }
+      if (e.key === 'Escape') close();
+    });
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(panel);
+    syncLabel();
+  }
+  function enhanceAllSelects(root = document){
+    root.querySelectorAll('select').forEach(enhanceSelect);
+  }
+  enhanceAllSelects();
+
   let allRegs = [];
   let allTickets = [];
   let ticketPrices = { u18: 0, ue18: 0 };
@@ -381,6 +502,92 @@
         console.error('Ticketzähler konnte nicht synchronisiert werden:', err);
       }
     }, 1500);
+  }
+
+  // --- Insights-Charts ---
+  Chart.defaults.color = '#9aa7c2';
+  Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif";
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
+
+  let chartCategory = null, chartPaid = null, chartDaily = null;
+
+  function tsToDate(ts){
+    if (!ts) return null;
+    if (typeof ts.toDate === 'function') return ts.toDate();
+    return new Date(ts);
+  }
+
+  function updateCharts(){
+    const catCanvas = document.getElementById('chartCategory');
+    const paidCanvas = document.getElementById('chartPaid');
+    const dailyCanvas = document.getElementById('chartDaily');
+    if (!catCanvas || !paidCanvas || !dailyCanvas) return;
+
+    // 1) U18 / Ü18-Verteilung (über alle Tickets, nicht nur Bestellungen)
+    const u18Count = allTickets.filter(t => t.category === 'u18').length;
+    const ue18Count = allTickets.filter(t => t.category === 'ue18').length;
+
+    if (chartCategory) chartCategory.destroy();
+    chartCategory = new Chart(catCanvas, {
+      type: 'doughnut',
+      data: {
+        labels: ['Unter 18', '18 oder älter'],
+        datasets: [{ data: [u18Count, ue18Count], backgroundColor: ['#8fb4ff', '#7fe0a8'], borderColor: '#131c30', borderWidth: 2 }]
+      },
+      options: { plugins: { legend: { position: 'bottom' } }, maintainAspectRatio: true }
+    });
+
+    // 2) Bezahlt vs. offen (auf Bestellungs-Ebene)
+    const paidCount = allRegs.filter(r => r.paid).length;
+    const openCount = allRegs.length - paidCount;
+
+    if (chartPaid) chartPaid.destroy();
+    chartPaid = new Chart(paidCanvas, {
+      type: 'doughnut',
+      data: {
+        labels: ['Bezahlt', 'Offen'],
+        datasets: [{ data: [paidCount, openCount], backgroundColor: ['#7fe0a8', '#ffd27f'], borderColor: '#131c30', borderWidth: 2 }]
+      },
+      options: { plugins: { legend: { position: 'bottom' } }, maintainAspectRatio: true }
+    });
+
+    // 3) Anmeldungen pro Tag (Anzahl neuer Bestellungen je Kalendertag)
+    const dayCounts = {};
+    allRegs.forEach(r => {
+      const d = tsToDate(r.createdAt);
+      if (!d) return;
+      const key = d.toISOString().slice(0, 10);
+      dayCounts[key] = (dayCounts[key] || 0) + 1;
+    });
+    const sortedDays = Object.keys(dayCounts).sort();
+    const dayLabels = sortedDays.map(k => {
+      const [y,m,dd] = k.split('-');
+      return `${dd}.${m}.`;
+    });
+
+    if (chartDaily) chartDaily.destroy();
+    if (sortedDays.length === 0) {
+      const ctx = dailyCanvas.getContext('2d');
+      ctx.clearRect(0, 0, dailyCanvas.width, dailyCanvas.height);
+    } else {
+      chartDaily = new Chart(dailyCanvas, {
+        type: 'line',
+        data: {
+          labels: dayLabels,
+          datasets: [{
+            label: 'Neue Anmeldungen',
+            data: sortedDays.map(k => dayCounts[k]),
+            borderColor: '#8fb4ff', backgroundColor: 'rgba(143,180,255,0.15)',
+            fill: true, tension: 0.3, pointRadius: 3,
+          }]
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+          maintainAspectRatio: true,
+        }
+      });
+    }
   }
 
   const DEFAULT_SCHEDULE = [
@@ -447,19 +654,27 @@
 
   document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
 
-  document.getElementById('settingsToggleBtn').addEventListener('click', () => {
-    document.getElementById('settingsPanel').classList.toggle('show');
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelector(`[data-tab-content="${btn.dataset.tab}"]`).classList.add('active');
+      if (btn.dataset.tab === 'insights') updateCharts();
+    });
   });
 
   function startListening(){
     onSnapshot(query(collection(db, 'registrations'), orderBy('createdAt', 'desc')), (snap) => {
       allRegs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       render();
+      updateCharts();
     });
     onSnapshot(collection(db, 'tickets'), (snap) => {
       allTickets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       render();
       syncStatsCounter();
+      updateCharts();
     });
     onSnapshot(doc(db, 'settings', 'pricing'), (snap) => {
       const data = snap.exists() ? snap.data() : {};
@@ -696,6 +911,7 @@
       <button type="button">×</button>`;
     row.querySelector('button').addEventListener('click', () => row.remove());
     companionsBlock.appendChild(row);
+    enhanceSelect(row.querySelector('.add-companion-category'));
   }
 
   document.getElementById('addBtn').addEventListener('click', () => {
