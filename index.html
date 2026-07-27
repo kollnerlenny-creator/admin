@@ -505,9 +505,16 @@
   }
 
   // --- Insights-Charts ---
-  Chart.defaults.color = '#9aa7c2';
-  Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif";
-  Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
+  // Abgesichert: falls Chart.js aus irgendeinem Grund nicht laden konnte
+  // (Netzwerk, Blocker, CDN down), darf das NICHT den Rest des Scripts
+  // (insbesondere den Login) lahmlegen.
+  if (typeof Chart !== 'undefined') {
+    Chart.defaults.color = '#9aa7c2';
+    Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif";
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
+  } else {
+    console.error('Chart.js konnte nicht geladen werden — Diagramme sind deaktiviert, der Rest funktioniert normal.');
+  }
 
   let chartCategory = null, chartPaid = null, chartDaily = null;
 
@@ -518,6 +525,7 @@
   }
 
   function updateCharts(){
+    if (typeof Chart === 'undefined') return; // Chart.js nicht verfügbar — Diagramme einfach überspringen
     const catCanvas = document.getElementById('chartCategory');
     const paidCanvas = document.getElementById('chartPaid');
     const dailyCanvas = document.getElementById('chartDaily');
