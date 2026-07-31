@@ -818,9 +818,10 @@
     btnEl.disabled = true;
     btnEl.textContent = '⏳ ...';
     try {
+      const idToken = await auth.currentUser.getIdToken();
       const res = await fetch(WORKER_URL + '/generate-pdf', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + idToken},
         body: JSON.stringify({
           attendees: tickets.map(t => ({ name: t.name, ticketId: t.ticketId, category: t.category }))
         })
@@ -859,9 +860,10 @@
         ? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
         : { u18: 0, ue18: 0 };
 
+      const idToken = await auth.currentUser.getIdToken();
       const res = await fetch(WORKER_URL + '/generate-invoice', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + idToken},
         body: JSON.stringify({
           ordererName: reg.name,
           attendees: tickets.map(t => ({
@@ -933,9 +935,10 @@
         ? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
         : { u18: 0, ue18: 0 };
 
+      const idToken = await auth.currentUser.getIdToken();
       const res = await fetch(WORKER_URL + '/send-tickets', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + idToken},
         body: JSON.stringify({
           email: reg.email,
           ordererName: reg.name,
