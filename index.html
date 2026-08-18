@@ -108,6 +108,9 @@
     padding:10px 16px; border-radius:var(--radius-sm); border:1px solid var(--glass-border);
     background:rgba(255,255,255,0.05); color:var(--text); cursor:pointer; font-size:13px;
   }
+  .toolbar button.active{
+    background:rgba(255,210,127,0.15); border-color:rgba(255,210,127,0.45); color:var(--warn, #ffd27f);
+  }
 
   .add-form{
     display:none; flex-direction:column; gap:10px; margin-bottom:16px; padding:16px;
@@ -274,6 +277,7 @@
   <div class="tab-content active" data-tab-content="orders">
     <div class="toolbar">
       <input type="text" id="search" placeholder="Nach Name oder E-Mail suchen...">
+      <button id="filterUnpaidBtn">Nur Unbezahlte</button>
       <button id="addBtn">+ Bestellung hinzufügen</button>
       <button id="exportBtn">CSV exportieren</button>
       <button id="logoutBtn">Logout</button>
@@ -732,11 +736,14 @@
     return cat === 'u18' ? 'U18' : cat === 'ue18' ? 'Ü18' : '';
   }
 
+  let showOnlyUnpaid = false;
+
   function render(){
     const term = document.getElementById('search').value.toLowerCase();
     const rows = allRegs.filter(r =>
-      !term || (r.name||'').toLowerCase().includes(term) || (r.email||'').toLowerCase().includes(term)
-      || (r.companions||[]).some(c => (c.name||'').toLowerCase().includes(term))
+      (!term || (r.name||'').toLowerCase().includes(term) || (r.email||'').toLowerCase().includes(term)
+      || (r.companions||[]).some(c => (c.name||'').toLowerCase().includes(term)))
+      && (!showOnlyUnpaid || !r.paid)
     );
 
     const tbody = document.getElementById('tableBody');
@@ -1206,6 +1213,13 @@
   });
 
   document.getElementById('search').addEventListener('input', render);
+
+  document.getElementById('filterUnpaidBtn').addEventListener('click', (e) => {
+    showOnlyUnpaid = !showOnlyUnpaid;
+    e.target.classList.toggle('active', showOnlyUnpaid);
+    e.target.textContent = showOnlyUnpaid ? 'Alle anzeigen' : 'Nur Unbezahlte';
+    render();
+  });
 
   function exportCsv(filename){
     const header = ['Besteller','Begleitungen','E-Mail','Tickets gesamt','Bezahlt','Angemeldet am','Bezahlt am'];
