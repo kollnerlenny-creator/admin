@@ -243,6 +243,52 @@
     background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius);
     overflow-x:auto; backdrop-filter:blur(16px);
   }
+
+  /* Kassen-Popup */
+  .modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(5,7,14,0.72); backdrop-filter:blur(4px);
+    align-items:center; justify-content:center; z-index:300; padding:20px;
+  }
+  .modal-overlay.show{display:flex;}
+  .cash-modal{
+    width:100%; max-width:340px; background:var(--bg-2); border:1px solid var(--glass-border);
+    border-radius:var(--radius); padding:22px; box-shadow:0 24px 70px rgba(0,0,0,0.6);
+  }
+  .cash-modal-name{font-size:15px; font-weight:600; margin-bottom:14px; text-align:center;}
+  .cash-row{
+    display:flex; justify-content:space-between; align-items:baseline; font-size:13px;
+    color:var(--text-dim); padding:7px 0; border-bottom:1px solid rgba(255,255,255,0.06);
+  }
+  .cash-row strong{font-size:16px; color:var(--text); font-weight:600;}
+  .cash-row.cash-change{border-bottom:none; margin-top:2px;}
+  .cash-row.cash-change strong{font-size:19px; color:var(--success);}
+  .cash-row.cash-change.negative strong{color:var(--warn);}
+
+  .numpad{display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin:16px 0 10px;}
+  .num-btn{
+    padding:14px 0; border-radius:var(--radius-sm); border:1px solid var(--glass-border);
+    background:rgba(255,255,255,0.05); color:var(--text); font-size:18px; font-weight:600; cursor:pointer;
+  }
+  .num-btn:hover{background:rgba(255,255,255,0.1);}
+  .num-btn.num-clear{color:var(--warn); border-color:rgba(255,210,127,0.35);}
+  .num-btn.num-back{color:var(--text-dim);}
+
+  .exact-btn{
+    width:100%; padding:9px 0; margin-bottom:14px; border-radius:var(--radius-sm);
+    border:1px solid rgba(143,180,255,0.35); background:rgba(143,180,255,0.1); color:var(--accent);
+    font-size:12.5px; font-weight:600; cursor:pointer;
+  }
+  .exact-btn:hover{background:rgba(143,180,255,0.18);}
+
+  .cash-modal-actions{display:flex; gap:10px;}
+  .cash-modal-actions button{flex:1; padding:12px 0; border-radius:var(--radius-sm); font-size:14px; font-weight:600; cursor:pointer;}
+  .cash-modal-actions button:not(.secondary){
+    border:none; background:var(--success); color:#0a0e1a;
+  }
+  .cash-modal-actions button:not(.secondary):disabled{background:rgba(127,224,168,0.25); color:rgba(10,14,26,0.5); cursor:not-allowed;}
+  .cash-modal-actions button.secondary{
+    border:1px solid var(--glass-border); background:rgba(255,255,255,0.05); color:var(--text);
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -404,6 +450,48 @@
       <div class="info-editor-actions">
         <button type="button" id="deleteAllDataBtn" class="danger-btn">⚠️ Alle Bestellungs- und Ticketdaten jetzt endgültig löschen</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Kassen-Popup: Betrag eingeben, Rückgeld wird automatisch berechnet -->
+<div class="modal-overlay" id="cashModalOverlay">
+  <div class="cash-modal">
+    <div class="cash-modal-name" id="cashModalName"></div>
+
+    <div class="cash-row">
+      <span>Fälliger Betrag</span>
+      <strong id="cashDue">0,00 €</strong>
+    </div>
+    <div class="cash-row">
+      <span>Gegeben</span>
+      <strong id="cashGiven">0,00 €</strong>
+    </div>
+    <div class="cash-row cash-change" id="cashChangeRow">
+      <span>Rückgeld</span>
+      <strong id="cashChange">0,00 €</strong>
+    </div>
+
+    <div class="numpad">
+      <button type="button" class="num-btn" data-num="1">1</button>
+      <button type="button" class="num-btn" data-num="2">2</button>
+      <button type="button" class="num-btn" data-num="3">3</button>
+      <button type="button" class="num-btn" data-num="4">4</button>
+      <button type="button" class="num-btn" data-num="5">5</button>
+      <button type="button" class="num-btn" data-num="6">6</button>
+      <button type="button" class="num-btn" data-num="7">7</button>
+      <button type="button" class="num-btn" data-num="8">8</button>
+      <button type="button" class="num-btn" data-num="9">9</button>
+      <button type="button" class="num-btn num-clear" id="cashClearBtn">C</button>
+      <button type="button" class="num-btn" data-num="0">0</button>
+      <button type="button" class="num-btn num-back" id="cashBackBtn">⌫</button>
+    </div>
+
+    <button type="button" class="exact-btn" id="cashExactBtn">Passend</button>
+
+    <div class="cash-modal-actions">
+      <button type="button" class="secondary" id="cashCancelBtn">Abbrechen</button>
+      <button type="button" id="cashConfirmBtn" disabled>Bezahlt</button>
     </div>
   </div>
 </div>
@@ -775,7 +863,7 @@
           <div class="paid-cell">
             ${r.paid
               ? `<span class="badge in">Bezahlt</span>`
-              : `<button class="pay-btn" data-id="${r.id}">Als bezahlt markieren</button>`}
+              : `<button class="pay-btn" data-id="${r.id}">Bezahlen</button>`}
             ${r.paid ? `<button class="pdf-btn" data-id="${r.id}" title="Tickets als PDF herunterladen">📄 PDF</button>` : ''}
             ${r.paid ? `<button class="invoice-btn" data-id="${r.id}" title="Quittung als PDF herunterladen">🧾 Quittung</button>` : ''}
           </div>
@@ -801,7 +889,7 @@
     document.getElementById('statU18Ratio').textContent = `${u18Count} / ${ue18Count}`;
 
     tbody.querySelectorAll('.pay-btn').forEach(btn => {
-      btn.addEventListener('click', () => markAsPaid(btn.dataset.id, btn));
+      btn.addEventListener('click', () => openCashModal(btn.dataset.id));
     });
     tbody.querySelectorAll('.delete-btn').forEach(btn => {
       btn.addEventListener('click', () => deleteRegistration(btn.dataset.id));
@@ -925,6 +1013,74 @@
       day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
     });
   }
+
+  // --- Kassen-Popup: Betrag eingeben, Rückgeld wird automatisch berechnet ---
+  let cashModalState = { regId: null, btnEl: null, dueCents: 0, givenCents: 0 };
+
+  function ticketsDueCents(regId){
+    const tickets = ticketsFor(regId);
+    const total = tickets.reduce((sum, t) => sum + (ticketPrices[t.category] || 0), 0);
+    return Math.round(total * 100);
+  }
+
+  function formatCents(cents){
+    return (cents / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  }
+
+  function updateCashDisplay(){
+    document.getElementById('cashDue').textContent = formatCents(cashModalState.dueCents);
+    document.getElementById('cashGiven').textContent = formatCents(cashModalState.givenCents);
+    const change = cashModalState.givenCents - cashModalState.dueCents;
+    const changeRow = document.getElementById('cashChangeRow');
+    document.getElementById('cashChange').textContent = formatCents(Math.abs(change));
+    changeRow.classList.toggle('negative', change < 0);
+    document.getElementById('cashConfirmBtn').disabled = cashModalState.givenCents < cashModalState.dueCents;
+  }
+
+  function openCashModal(regId){
+    const reg = allRegs.find(r => r.id === regId);
+    const btnEl = document.getElementById('tableBody').querySelector(`.pay-btn[data-id="${regId}"]`);
+    if (!reg || !btnEl) return;
+
+    cashModalState = { regId, btnEl, dueCents: ticketsDueCents(regId), givenCents: 0 };
+    document.getElementById('cashModalName').textContent = reg.name;
+    updateCashDisplay();
+    document.getElementById('cashModalOverlay').classList.add('show');
+  }
+
+  function closeCashModal(){
+    document.getElementById('cashModalOverlay').classList.remove('show');
+    cashModalState = { regId: null, btnEl: null, dueCents: 0, givenCents: 0 };
+  }
+
+  document.querySelectorAll('.num-btn[data-num]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const next = cashModalState.givenCents * 10 + Number(btn.dataset.num);
+      if (next <= 99999999) cashModalState.givenCents = next; // Deckel bei 999.999,99 €
+      updateCashDisplay();
+    });
+  });
+  document.getElementById('cashBackBtn').addEventListener('click', () => {
+    cashModalState.givenCents = Math.floor(cashModalState.givenCents / 10);
+    updateCashDisplay();
+  });
+  document.getElementById('cashClearBtn').addEventListener('click', () => {
+    cashModalState.givenCents = 0;
+    updateCashDisplay();
+  });
+  document.getElementById('cashExactBtn').addEventListener('click', () => {
+    cashModalState.givenCents = cashModalState.dueCents;
+    updateCashDisplay();
+  });
+  document.getElementById('cashCancelBtn').addEventListener('click', closeCashModal);
+  document.getElementById('cashModalOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'cashModalOverlay') closeCashModal();
+  });
+  document.getElementById('cashConfirmBtn').addEventListener('click', () => {
+    const { regId, btnEl } = cashModalState;
+    closeCashModal();
+    if (regId && btnEl) markAsPaid(regId, btnEl);
+  });
 
   async function markAsPaid(regId, btnEl){
     btnEl.disabled = true;
