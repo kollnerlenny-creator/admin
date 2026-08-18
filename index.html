@@ -767,7 +767,7 @@
             ? `<span class="badge in">Bezahlt</span>`
             : `<button class="pay-btn" data-id="${r.id}">Als bezahlt markieren</button>`}
           ${r.paid ? `<button class="pdf-btn" data-id="${r.id}" title="Tickets als PDF herunterladen">📄 PDF</button>` : ''}
-          ${r.paid ? `<button class="invoice-btn" data-id="${r.id}" title="Rechnung als PDF herunterladen">🧾 Rechnung</button>` : ''}
+          ${r.paid ? `<button class="invoice-btn" data-id="${r.id}" title="Quittung als PDF herunterladen">🧾 Quittung</button>` : ''}
         </td>
         <td style="font-size:11px; color:var(--text-dim); white-space:nowrap;">
           <div>Angemeldet:<br>${formatTimestamp(r.createdAt)}</div>
@@ -873,21 +873,21 @@
       });
       if(!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `Rechnung konnte nicht erstellt werden (Status ${res.status})`);
+        throw new Error(errBody.error || `Quittung konnte nicht erstellt werden (Status ${res.status})`);
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Winterball-Rechnung-${reg.name.replace(/\s+/g,'-')}.pdf`;
+      a.download = `Winterball-Quittung-${reg.name.replace(/\s+/g,'-')}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch(err){
       console.error(err);
-      alert('Rechnung konnte nicht erstellt werden:\n' + err.message);
+      alert('Quittung konnte nicht erstellt werden:\n' + err.message);
     } finally {
       btnEl.disabled = false;
-      btnEl.textContent = '🧾 Rechnung';
+      btnEl.textContent = '🧾 Quittung';
     }
   }
 
@@ -929,7 +929,7 @@
       await batch.commit();
 
       // Preise IMMER frisch aus Firestore holen (nicht den evtl. veralteten
-      // lokalen Cache nutzen) — verhindert 0€-Rechnungen durch Timing-Probleme.
+      // lokalen Cache nutzen) — verhindert 0€-Quittungen durch Timing-Probleme.
       const priceSnap = await getDoc(doc(db, 'settings', 'pricing'));
       const freshPrices = priceSnap.exists()
         ? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
