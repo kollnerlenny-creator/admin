@@ -205,13 +205,14 @@
   tbody tr:hover{background:rgba(255,255,255,0.03);}
   tbody td{padding:10px 12px; vertical-align:top;}
   .badge{
-    display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600;
+    display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; flex-shrink:0; white-space:nowrap;
   }
   .badge.in{background:rgba(127,224,168,0.15); color:var(--success);}
   .badge.out{background:rgba(255,255,255,0.08); color:var(--text-dim);}
   .pay-btn{
     padding:5px 12px; border-radius:20px; border:1px solid rgba(255,210,127,0.4);
     background:rgba(255,210,127,0.1); color:var(--warn); font-size:11px; font-weight:600; cursor:pointer;
+    white-space:nowrap; flex-shrink:0;
   }
   .pay-btn:hover{background:rgba(255,210,127,0.2);}
   .pay-btn:disabled{opacity:0.5; cursor:default;}
@@ -232,9 +233,10 @@
     border:1px solid var(--glass-border); background:rgba(255,255,255,0.05); color:var(--text-dim);
   }
   .checkin-toggle.in{border-color:rgba(127,224,168,0.4); background:rgba(127,224,168,0.12); color:var(--success);}
+  .paid-cell{display:flex; align-items:center; gap:6px; flex-wrap:nowrap; white-space:nowrap;}
   .pdf-btn, .invoice-btn{
-    margin-left:8px; padding:5px 10px; border-radius:20px; border:1px solid var(--glass-border);
-    background:rgba(255,255,255,0.05); color:var(--text); font-size:11px; cursor:pointer;
+    padding:5px 9px; border-radius:20px; border:1px solid var(--glass-border);
+    background:rgba(255,255,255,0.05); color:var(--text); font-size:11px; cursor:pointer; white-space:nowrap; flex-shrink:0;
   }
   .pdf-btn:hover, .invoice-btn:hover{background:rgba(255,255,255,0.1);}
   .table-wrap{
@@ -770,11 +772,13 @@
         <td>${escapeHtml(r.email||'')}</td>
         <td>${ticketsHtml}</td>
         <td>
-          ${r.paid
-            ? `<span class="badge in">Bezahlt</span>`
-            : `<button class="pay-btn" data-id="${r.id}">Als bezahlt markieren</button>`}
-          ${r.paid ? `<button class="pdf-btn" data-id="${r.id}" title="Tickets als PDF herunterladen">📄 PDF</button>` : ''}
-          ${r.paid ? `<button class="invoice-btn" data-id="${r.id}" title="Quittung als PDF herunterladen">🧾 Quittung</button>` : ''}
+          <div class="paid-cell">
+            ${r.paid
+              ? `<span class="badge in">Bezahlt</span>`
+              : `<button class="pay-btn" data-id="${r.id}">Als bezahlt markieren</button>`}
+            ${r.paid ? `<button class="pdf-btn" data-id="${r.id}" title="Tickets als PDF herunterladen">📄 PDF</button>` : ''}
+            ${r.paid ? `<button class="invoice-btn" data-id="${r.id}" title="Quittung als PDF herunterladen">🧾 Quittung</button>` : ''}
+          </div>
         </td>
         <td style="font-size:11px; color:var(--text-dim); white-space:nowrap;">
           <div>Angemeldet:<br>${formatTimestamp(r.createdAt)}</div>
