@@ -18,7 +18,7 @@
     background:linear-gradient(180deg,var(--bg-1),var(--bg-2));
     color:var(--text); min-height:100vh; padding:24px 16px;
   }
-  .wrap{max-width:960px; margin:0 auto;}
+  .wrap{max-width:min(1400px, 96vw); margin:0 auto;}
   h1{font-weight:300; font-size:26px; margin-bottom:4px;}
   .sub{color:var(--text-dim); font-size:13px; margin-bottom:24px;}
 
@@ -436,6 +436,16 @@
     </div>
 
     <div class="info-editor">
+      <label for="maxTicketsInput">Maximale Teilnehmerzahl (leer lassen = kein Limit). Sobald erreicht, sperrt sich die Anmeldeseite automatisch.</label>
+      <input type="number" id="maxTicketsInput" min="1" style="max-width:120px;" placeholder="z.B. 200">
+      <div class="info-editor-actions">
+        <button id="maxTicketsSaveBtn">Speichern</button>
+        <button id="maxTicketsClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Kein Limit</button>
+        <span class="price-saved" id="maxTicketsSaved">Gespeichert ✓</span>
+      </div>
+    </div>
+
+    <div class="info-editor">
       <label>Ablaufplan des Abends (erscheint als Zeitstrahl "Ablauf" auf der Winterball-Seite)</label>
       <div class="schedule-list" id="scheduleList"></div>
       <button type="button" id="scheduleAddBtn">+ Programmpunkt hinzufügen</button>
@@ -843,6 +853,10 @@
       const grade = snap.exists() ? snap.data().grade : null;
       document.getElementById('lernsaxThresholdInput').value = grade || '';
       lernsaxThreshold = grade || null;
+    });
+    onSnapshot(doc(db, 'settings', 'capacity'), (snap) => {
+      const max = snap.exists() ? snap.data().maxTickets : null;
+      document.getElementById('maxTicketsInput').value = max || '';
     });
     onSnapshot(doc(db, 'settings', 'schedule'), (snap) => {
       // Nur beim allerersten Laden rendern, damit ein laufender Bearbeitungsvorgang
@@ -1458,6 +1472,23 @@
     if (isNaN(val) || val < 1 || val > 13) { alert('Bitte eine gültige Klassenstufe (1–13) eingeben.'); return; }
     await setDoc(doc(db, 'settings', 'lernsaxThreshold'), { grade: val });
     const savedEl = document.getElementById('lernsaxThresholdSaved');
+    savedEl.classList.add('show');
+    setTimeout(() => savedEl.classList.remove('show'), 2000);
+  });
+
+  document.getElementById('maxTicketsSaveBtn').addEventListener('click', async () => {
+    const raw = document.getElementById('maxTicketsInput').value;
+    const val = raw === '' ? null : Number(raw);
+    if (val !== null && (isNaN(val) || val < 1)) { alert('Bitte eine gültige Zahl eingeben, oder leer lassen für kein Limit.'); return; }
+    await setDoc(doc(db, 'settings', 'capacity'), { maxTickets: val });
+    const savedEl = document.getElementById('maxTicketsSaved');
+    savedEl.classList.add('show');
+    setTimeout(() => savedEl.classList.remove('show'), 2000);
+  });
+  document.getElementById('maxTicketsClearBtn').addEventListener('click', async () => {
+    document.getElementById('maxTicketsInput').value = '';
+    await setDoc(doc(db, 'settings', 'capacity'), { maxTickets: null });
+    const savedEl = document.getElementById('maxTicketsSaved');
     savedEl.classList.add('show');
     setTimeout(() => savedEl.classList.remove('show'), 2000);
   });
