@@ -227,6 +227,12 @@
     cursor:pointer; font-size:14px;
   }
   .delete-btn:hover{background:rgba(255,128,128,0.2);}
+  .edit-reg-btn{
+    background:rgba(143,180,255,0.1); border:1px solid rgba(143,180,255,0.3);
+    color:var(--accent); border-radius:var(--radius-sm); width:34px; height:34px;
+    cursor:pointer; font-size:14px; margin-right:6px;
+  }
+  .edit-reg-btn:hover{background:rgba(143,180,255,0.2);}
   .attendee-list{list-style:none; font-size:12px; color:var(--text-dim);}
   .attendee-list li{margin-bottom:2px;}
   .attendee-list .orderer{color:var(--text); font-weight:600;}
@@ -532,6 +538,41 @@
     <div class="cash-modal-actions" style="margin-top:14px;">
       <button type="button" class="secondary" id="addCompanionModalCancelBtn">Abbrechen</button>
       <button type="button" id="addCompanionModalConfirmBtn">Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Popup: Bestellung vollständig bearbeiten (Name, E-Mail, Kategorie, Begleitungen) -->
+<div class="modal-overlay" id="editRegModalOverlay">
+  <div class="cash-modal" style="max-width:420px; text-align:left;">
+    <div class="cash-modal-name" style="text-align:center;">Bestellung bearbeiten</div>
+
+    <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+      <label style="font-size:12px; color:var(--text-dim);" for="editRegNameInput">Name des Bestellers</label>
+      <input type="text" id="editRegNameInput"
+        style="padding:10px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:14px;">
+    </div>
+    <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+      <label style="font-size:12px; color:var(--text-dim);" for="editRegEmailInput">E-Mail</label>
+      <input type="email" id="editRegEmailInput"
+        style="padding:10px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:14px;">
+    </div>
+    <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
+      <label style="font-size:12px; color:var(--text-dim);" for="editRegCategory">Altersgruppe des Bestellers</label>
+      <select id="editRegCategory">
+        <option value="u18">U18</option>
+        <option value="ue18">Ü18</option>
+      </select>
+    </div>
+
+    <div style="font-size:12px; color:var(--text-dim); font-weight:600; margin-bottom:8px;">Begleitungen</div>
+    <div id="editRegCompanionsList" style="display:flex; flex-direction:column; gap:8px;"></div>
+    <button type="button" class="add-companion-btn" id="editRegAddCompanionBtn" style="margin-top:8px; width:100%;">+ Begleitung hinzufügen</button>
+
+    <div id="editRegHint" style="font-size:11.5px; color:var(--text-dim); margin:12px 0 4px;"></div>
+    <div class="cash-modal-actions" style="margin-top:14px;">
+      <button type="button" class="secondary" id="editRegCancelBtn">Abbrechen</button>
+      <button type="button" id="editRegSaveBtn">Speichern</button>
     </div>
   </div>
 </div>
@@ -932,7 +973,10 @@
           <div>Angemeldet:<br>${formatTimestamp(r.createdAt)}</div>
           ${r.paid ? `<div style="margin-top:6px;">Bezahlt:<br>${formatTimestamp(r.paidAt)}</div>` : ''}
         </td>
-        <td><button class="delete-btn" data-id="${r.id}" title="Bestellung löschen">🗑</button></td>
+        <td>
+          <button class="edit-reg-btn" data-id="${r.id}" title="Bestellung bearbeiten">✏️</button>
+          <button class="delete-btn" data-id="${r.id}" title="Bestellung löschen">🗑</button>
+        </td>
       </tr>`;
     }).join('');
 
@@ -953,6 +997,9 @@
     });
     tbody.querySelectorAll('.delete-btn').forEach(btn => {
       btn.addEventListener('click', () => deleteRegistration(btn.dataset.id));
+    });
+    tbody.querySelectorAll('.edit-reg-btn').forEach(btn => {
+      btn.addEventListener('click', () => openEditRegModal(btn.dataset.id));
     });
     tbody.querySelectorAll('.checkin-toggle').forEach(btn => {
       btn.addEventListener('click', () => toggleCheckIn(btn.dataset.ticketId, btn.dataset.state === '1'));
@@ -1143,6 +1190,171 @@
     const { regId, btnEl } = cashModalState;
     closeCashModal();
     if (regId && btnEl) markAsPaid(regId, btnEl);
+  });
+
+  // --- Bestellung vollständig bearbeiten (Name, E-Mail, Kategorie, Begleitungen) ---
+  let editRegId = null;
+
+  function makeEditCompanionRow(companion, ticketId){
+    const row = document.createElement('div');
+    row.className = 'companion-add-row';
+    row.dataset.ticketId = ticketId || ''; // vorhandenes Ticket, das mit dieser Zeile verknüpft ist (leer = neu)
+    row.innerHTML = `
+      <input type="text" class="edit-companion-name" value="${(companion.name||'').replace(/"/g,'&quot;')}" placeholder="Vor- und Nachname"
+        style="padding:10px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:13px;">
+      <select class="edit-companion-category">
+        <option value="u18">U18</option>
+        <option value="ue18">Ü18</option>
+      </select>
+      <button type="button" title="Begleitung entfernen">×</button>`;
+    row.querySelector('.edit-companion-category').value = companion.category === 'ue18' ? 'ue18' : 'u18';
+    row.querySelector('button').addEventListener('click', () => row.remove());
+    enhanceSelect(row.querySelector('.edit-companion-category'));
+    return row;
+  }
+
+  function openEditRegModal(regId){
+    const reg = allRegs.find(r => r.id === regId);
+    if (!reg) return;
+    editRegId = regId;
+
+    document.getElementById('editRegNameInput').value = reg.name || '';
+    document.getElementById('editRegEmailInput').value = reg.email || '';
+    document.getElementById('editRegCategory').value = reg.category === 'ue18' ? 'ue18' : 'u18';
+    resetCustomSelectVisual(document.getElementById('editRegCategory'));
+
+    // Bestehende Tickets so gut wie möglich den Begleitungen zuordnen (per Name +
+    // Kategorie), damit beim Speichern genau die richtigen Ticket-Dokumente
+    // aktualisiert bzw. gelöscht werden, statt neue anzulegen.
+    const tickets = ticketsFor(regId);
+    const ordererTicket = tickets.find(t => t.name === reg.name && t.category === reg.category);
+    const usedTicketIds = new Set(ordererTicket ? [ordererTicket.id] : []);
+
+    const list = document.getElementById('editRegCompanionsList');
+    list.innerHTML = '';
+    (reg.companions || []).forEach(c => {
+      const match = tickets.find(t => !usedTicketIds.has(t.id) && t.name === c.name && t.category === c.category);
+      if (match) usedTicketIds.add(match.id);
+      list.appendChild(makeEditCompanionRow(c, match ? match.id : ''));
+    });
+
+    document.getElementById('editRegHint').textContent = reg.paid
+      ? 'Bestellung ist bereits bezahlt. Neu hinzugefügte Begleitungen bekommen sofort eine eigene Ticket-Mail — bestehende Tickets werden nicht automatisch neu verschickt.'
+      : 'Bestellung ist noch nicht bezahlt — Änderungen wirken sich erst beim Bezahlen auf die verschickten Tickets aus.';
+
+    document.getElementById('editRegModalOverlay').classList.add('show');
+  }
+
+  function closeEditRegModal(){
+    document.getElementById('editRegModalOverlay').classList.remove('show');
+    editRegId = null;
+  }
+
+  document.getElementById('editRegAddCompanionBtn').addEventListener('click', () => {
+    document.getElementById('editRegCompanionsList').appendChild(makeEditCompanionRow({ name: '', category: 'u18' }, ''));
+  });
+  document.getElementById('editRegCancelBtn').addEventListener('click', closeEditRegModal);
+  document.getElementById('editRegModalOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'editRegModalOverlay') closeEditRegModal();
+  });
+
+  document.getElementById('editRegSaveBtn').addEventListener('click', async () => {
+    const regId = editRegId;
+    const reg = allRegs.find(r => r.id === regId);
+    if (!reg) return;
+
+    const name = document.getElementById('editRegNameInput').value.trim();
+    const email = document.getElementById('editRegEmailInput').value.trim();
+    const category = document.getElementById('editRegCategory').value;
+    if (!name || !email) { alert('Name und E-Mail dürfen nicht leer sein.'); return; }
+
+    const companionRows = Array.from(document.getElementById('editRegCompanionsList').children);
+    const companionEntries = companionRows.map(row => ({
+      ticketId: row.dataset.ticketId || null,
+      name: row.querySelector('.edit-companion-name').value.trim(),
+      category: row.querySelector('.edit-companion-category').value
+    })).filter(c => c.name);
+
+    const saveBtn = document.getElementById('editRegSaveBtn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Speichern...';
+
+    try {
+      const tickets = ticketsFor(regId);
+      const ordererTicket = tickets.find(t => t.name === reg.name && t.category === reg.category);
+      const keptTicketIds = new Set(companionEntries.map(c => c.ticketId).filter(Boolean));
+      if (ordererTicket) keptTicketIds.add(ordererTicket.id);
+
+      const batch = writeBatch(db);
+
+      // 1) Bestellungs-Grunddaten aktualisieren
+      batch.update(doc(db, 'registrations', regId), {
+        name, email, category,
+        companions: companionEntries.map(c => ({ name: c.name, category: c.category }))
+      });
+
+      // 2) Ticket des Bestellers mitziehen (umbenennen/Kategorie ändern), oder
+      //    anlegen, falls aus irgendeinem Grund noch keins existiert
+      if (ordererTicket) {
+        batch.update(doc(db, 'tickets', ordererTicket.id), { name, category, email });
+      } else {
+        const ref = doc(collection(db, 'tickets'));
+        batch.set(ref, {
+          registrationId: regId, name, category, email,
+          ticketId: genTicketId(), paid: reg.paid, checkedIn: false, createdAt: serverTimestamp()
+        });
+      }
+
+      // 3) Begleitungen abgleichen: bestehende Tickets updaten, entfernte löschen,
+      //    neue anlegen
+      const newCompanionTickets = []; // für ggf. Ticket-Mail, falls schon bezahlt
+      companionEntries.forEach(c => {
+        if (c.ticketId) {
+          batch.update(doc(db, 'tickets', c.ticketId), { name: c.name, category: c.category });
+        } else {
+          const ref = doc(collection(db, 'tickets'));
+          const ticketId = genTicketId();
+          batch.set(ref, {
+            registrationId: regId, name: c.name, category: c.category, email,
+            ticketId, paid: reg.paid, checkedIn: false, createdAt: serverTimestamp()
+          });
+          newCompanionTickets.push({ name: c.name, category: c.category, ticketId });
+        }
+      });
+      tickets.forEach(t => {
+        if (!keptTicketIds.has(t.id)) batch.delete(doc(db, 'tickets', t.id));
+      });
+
+      await batch.commit();
+
+      // 4) Ist die Bestellung schon bezahlt und es kamen neue Begleitungen dazu,
+      //    dafür sofort eine eigene Ticket-Mail verschicken (wie beim separaten
+      //    "+ Begleitung"-Button)
+      if (reg.paid && newCompanionTickets.length) {
+        const priceSnap = await getDoc(doc(db, 'settings', 'pricing'));
+        const freshPrices = priceSnap.exists()
+          ? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
+          : { u18: 0, ue18: 0 };
+        const idToken = await auth.currentUser.getIdToken();
+        await fetch(WORKER_URL + '/send-tickets', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + idToken},
+          body: JSON.stringify({
+            email, ordererName: name,
+            attendees: newCompanionTickets.map(t => ({ ...t, price: freshPrices[t.category] || 0 })),
+            useLernSax: shouldUseLernSax(email)
+          })
+        });
+      }
+
+      closeEditRegModal();
+    } catch (err) {
+      console.error(err);
+      alert('Änderungen konnten nicht vollständig gespeichert werden: ' + err.message);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Speichern';
+    }
   });
 
   async function markAsPaid(regId, btnEl){
