@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Winter Ball · Admin</title>
-<meta name="robots" content="noindex, nofollow">
 <style>
   :root{
     --bg-1:#0a0e1a; --bg-2:#131c30;
@@ -38,12 +37,13 @@
   }
   .login-error{color:var(--error); font-size:13px; margin-top:10px; display:none;}
 
-  .stats{display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;}
+  .stats{display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap;}
   .stat{
     flex:1; min-width:120px; padding:16px; background:var(--glass); border:1px solid var(--glass-border);
-    border-radius:var(--radius-sm); backdrop-filter:blur(16px);
+    border-radius:var(--radius-sm); backdrop-filter:blur(16px); transition:border-color 0.2s, transform 0.2s;
   }
-  .stat .num{font-size:26px; font-weight:600;}
+  .stat:hover{border-color:rgba(143,180,255,0.35); transform:translateY(-1px);}
+  .stat .num{font-size:26px; font-weight:600; color:var(--accent);}
   .stat .lbl{font-size:12px; color:var(--text-dim); margin-top:2px;}
 
   .price-bar{
@@ -62,6 +62,13 @@
   }
   .price-saved{color:var(--success); font-size:12px; opacity:0; transition:opacity 0.3s;}
   .price-saved.show{opacity:1;}
+
+  .settings-section{margin-bottom:32px;}
+  .settings-section-title{
+    font-size:14px; font-weight:600; color:var(--text); margin-bottom:12px;
+    padding-bottom:8px; border-bottom:1px solid var(--glass-border);
+  }
+  .settings-section .info-editor:last-child{margin-bottom:0;}
 
   .info-editor{
     margin-bottom:20px; padding:14px 16px;
@@ -176,8 +183,17 @@
     align-self:flex-start; background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; padding:4px 0;
   }
 
-  .schedule-list{display:flex; flex-direction:column; gap:8px; margin-bottom:6px;}
-  .schedule-row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .schedule-list{display:flex; flex-direction:column; gap:6px; margin-bottom:6px;}
+  .schedule-row{
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+    padding:6px; border-radius:var(--radius-sm); transition:background 0.15s, box-shadow 0.15s;
+  }
+  .schedule-row.dragging{opacity:0.35;}
+  .schedule-row:hover{background:rgba(255,255,255,0.03);}
+  .drag-handle{
+    cursor:grab; color:var(--text-dim); font-size:16px; padding:0 2px; flex-shrink:0; user-select:none;
+  }
+  .drag-handle:active{cursor:grabbing;}
   .schedule-row input{
     padding:8px 10px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border);
     border-radius:var(--radius-sm); color:var(--text); font-size:13px; font-family:inherit;
@@ -395,82 +411,99 @@
 
   <!-- Tab: Einstellungen -->
   <div class="tab-content" data-tab-content="settings">
-    <div class="price-bar">
-      <label for="priceU18Input">Preis U18 (€)</label>
-      <input type="number" id="priceU18Input" min="0" step="0.5" placeholder="z.B. 10">
-      <label for="priceUe18Input">Preis Ü18 (€)</label>
-      <input type="number" id="priceUe18Input" min="0" step="0.5" placeholder="z.B. 15">
-      <button id="priceSaveBtn">Speichern</button>
-      <span class="price-saved" id="priceSaved">Gespeichert ✓</span>
-    </div>
-
-    <div class="info-editor">
-      <label for="infoText">Wichtige Infos auf der Anmeldeseite (optional, erscheint dort für alle Gäste)</label>
-      <textarea id="infoText" placeholder="z.B. Dresscode: Elegant. Einlass ab 17:00 Uhr. Fragen an ..."></textarea>
-      <div class="info-editor-actions">
-        <button id="infoSaveBtn">Speichern</button>
-        <span class="price-saved" id="infoSaved">Gespeichert ✓</span>
+    <div class="settings-section">
+      <div class="settings-section-title">💶 Preise</div>
+      <div class="price-bar">
+        <label for="priceU18Input">Preis U18 (€)</label>
+        <input type="number" id="priceU18Input" min="0" step="0.5" placeholder="z.B. 10">
+        <label for="priceUe18Input">Preis Ü18 (€)</label>
+        <input type="number" id="priceUe18Input" min="0" step="0.5" placeholder="z.B. 15">
+        <button id="priceSaveBtn">Speichern</button>
+        <span class="price-saved" id="priceSaved">Gespeichert ✓</span>
       </div>
     </div>
 
-    <div class="info-editor">
-      <label for="opensAtInput">Anmeldebeginn (davor läuft ein Countdown, Formular gesperrt)</label>
-      <input type="datetime-local" id="opensAtInput" style="max-width:240px;">
-      <div class="info-editor-actions">
-        <button id="opensAtSaveBtn">Speichern</button>
-        <button id="opensAtClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Sofort geöffnet</button>
-        <span class="price-saved" id="opensAtSaved">Gespeichert ✓</span>
+    <div class="settings-section">
+      <div class="settings-section-title">🗓️ Anmeldezeitraum &amp; Kapazität</div>
+
+      <div class="info-editor">
+        <label for="opensAtInput">Anmeldebeginn (davor läuft ein Countdown, Formular gesperrt)</label>
+        <input type="datetime-local" id="opensAtInput" style="max-width:240px;">
+        <div class="info-editor-actions">
+          <button id="opensAtSaveBtn">Speichern</button>
+          <button id="opensAtClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Sofort geöffnet</button>
+          <span class="price-saved" id="opensAtSaved">Gespeichert ✓</span>
+        </div>
+      </div>
+
+      <div class="info-editor">
+        <label for="deadlineInput">Anmeldeschluss (danach ist das Formular gesperrt)</label>
+        <input type="datetime-local" id="deadlineInput" style="max-width:240px;">
+        <div class="info-editor-actions">
+          <button id="deadlineSaveBtn">Speichern</button>
+          <button id="deadlineClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Kein Anmeldeschluss</button>
+          <span class="price-saved" id="deadlineSaved">Gespeichert ✓</span>
+        </div>
+      </div>
+
+      <div class="info-editor">
+        <label for="maxTicketsInput">Maximale Teilnehmerzahl (leer lassen = kein Limit). Sobald erreicht, sperrt sich die Anmeldeseite automatisch.</label>
+        <input type="number" id="maxTicketsInput" min="1" style="max-width:120px;" placeholder="z.B. 200">
+        <div class="info-editor-actions">
+          <button id="maxTicketsSaveBtn">Speichern</button>
+          <button id="maxTicketsClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Kein Limit</button>
+          <span class="price-saved" id="maxTicketsSaved">Gespeichert ✓</span>
+        </div>
       </div>
     </div>
 
-    <div class="info-editor">
-      <label for="deadlineInput">Anmeldeschluss (danach ist das Formular gesperrt)</label>
-      <input type="datetime-local" id="deadlineInput" style="max-width:240px;">
-      <div class="info-editor-actions">
-        <button id="deadlineSaveBtn">Speichern</button>
-        <button id="deadlineClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Kein Anmeldeschluss</button>
-        <span class="price-saved" id="deadlineSaved">Gespeichert ✓</span>
+    <div class="settings-section">
+      <div class="settings-section-title">📢 Infos für Gäste &amp; Mailversand</div>
+
+      <div class="info-editor">
+        <label for="infoText">Wichtige Infos auf der Anmeldeseite (optional, erscheint dort für alle Gäste)</label>
+        <textarea id="infoText" placeholder="z.B. Dresscode: Elegant. Einlass ab 17:00 Uhr. Fragen an ..."></textarea>
+        <div class="info-editor-actions">
+          <button id="infoSaveBtn">Speichern</button>
+          <span class="price-saved" id="infoSaved">Gespeichert ✓</span>
+        </div>
+      </div>
+
+      <div class="info-editor">
+        <label for="lernsaxThresholdInput">LernSax-Versand: Ab dieser Klassenstufe funktioniert der Weltweit-Modus (Mail geht normal raus). Darunter wird automatisch über deine eigene LernSax-Adresse verschickt.</label>
+        <input type="number" id="lernsaxThresholdInput" min="1" max="13" style="max-width:120px;" placeholder="z.B. 9">
+        <div class="info-editor-actions">
+          <button id="lernsaxThresholdSaveBtn">Speichern</button>
+          <span class="price-saved" id="lernsaxThresholdSaved">Gespeichert ✓</span>
+        </div>
       </div>
     </div>
 
-    <div class="info-editor">
-      <label for="lernsaxThresholdInput">LernSax-Versand: Ab dieser Klassenstufe funktioniert der Weltweit-Modus (Mail geht normal raus). Darunter wird automatisch über deine eigene LernSax-Adresse verschickt.</label>
-      <input type="number" id="lernsaxThresholdInput" min="1" max="13" style="max-width:120px;" placeholder="z.B. 9">
-      <div class="info-editor-actions">
-        <button id="lernsaxThresholdSaveBtn">Speichern</button>
-        <span class="price-saved" id="lernsaxThresholdSaved">Gespeichert ✓</span>
+    <div class="settings-section">
+      <div class="settings-section-title">🕐 Ablaufplan des Abends</div>
+      <div class="info-editor">
+        <label>Erscheint als Zeitstrahl "Ablauf" auf der Winterball-Seite. Zum Sortieren an ⠿ ziehen.</label>
+        <div class="schedule-list" id="scheduleList"></div>
+        <button type="button" id="scheduleAddBtn">+ Programmpunkt hinzufügen</button>
+        <div class="info-editor-actions">
+          <button id="scheduleSaveBtn">Speichern</button>
+          <span class="price-saved" id="scheduleSaved">Gespeichert ✓</span>
+        </div>
       </div>
     </div>
 
-    <div class="info-editor">
-      <label for="maxTicketsInput">Maximale Teilnehmerzahl (leer lassen = kein Limit). Sobald erreicht, sperrt sich die Anmeldeseite automatisch.</label>
-      <input type="number" id="maxTicketsInput" min="1" style="max-width:120px;" placeholder="z.B. 200">
-      <div class="info-editor-actions">
-        <button id="maxTicketsSaveBtn">Speichern</button>
-        <button id="maxTicketsClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Kein Limit</button>
-        <span class="price-saved" id="maxTicketsSaved">Gespeichert ✓</span>
-      </div>
-    </div>
-
-    <div class="info-editor">
-      <label>Ablaufplan des Abends (erscheint als Zeitstrahl "Ablauf" auf der Winterball-Seite)</label>
-      <div class="schedule-list" id="scheduleList"></div>
-      <button type="button" id="scheduleAddBtn">+ Programmpunkt hinzufügen</button>
-      <div class="info-editor-actions">
-        <button id="scheduleSaveBtn">Speichern</button>
-        <span class="price-saved" id="scheduleSaved">Gespeichert ✓</span>
-      </div>
-    </div>
-
-    <div class="info-editor">
-      <label>Datenschutz — ihr speichert Name, E-Mail, Altersgruppe (U18/Ü18) und Ticket-ID von
-        Schüler:innen. Das sind personenbezogene Daten Minderjähriger. Bitte nach der Veranstaltung
-        zeitnah löschen (empfohlen: spätestens 30 Tage danach, sofern keine Buchhaltungspflicht
-        entgegensteht). Die <a href="datenschutz.html" target="_blank" style="color:var(--accent);">Datenschutzerklärung</a>
-        ist auf der Anmeldeseite verlinkt und muss vor jeder Anmeldung bestätigt werden.
-      </label>
-      <div class="info-editor-actions">
-        <button type="button" id="deleteAllDataBtn" class="danger-btn">⚠️ Alle Bestellungs- und Ticketdaten jetzt endgültig löschen</button>
+    <div class="settings-section">
+      <div class="settings-section-title">🔒 Datenschutz &amp; Löschung</div>
+      <div class="info-editor">
+        <label>Ihr speichert Name, E-Mail, Altersgruppe (U18/Ü18) und Ticket-ID von
+          Schüler:innen. Das sind personenbezogene Daten Minderjähriger. Bitte nach der Veranstaltung
+          zeitnah löschen (empfohlen: spätestens 30 Tage danach, sofern keine Buchhaltungspflicht
+          entgegensteht). Die <a href="datenschutz.html" target="_blank" style="color:var(--accent);">Datenschutzerklärung</a>
+          ist auf der Anmeldeseite verlinkt und muss vor jeder Anmeldung bestätigt werden.
+        </label>
+        <div class="info-editor-actions">
+          <button type="button" id="deleteAllDataBtn" class="danger-btn">⚠️ Alle Bestellungs- und Ticketdaten jetzt endgültig löschen</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1596,26 +1629,35 @@
   function addScheduleRow(item = { time: '', label: '', note: '' }){
     const row = document.createElement('div');
     row.className = 'schedule-row';
+    row.draggable = true;
     row.innerHTML = `
+      <span class="drag-handle" title="Zum Sortieren ziehen">⠿</span>
       <input type="text" class="schedule-time" placeholder="17:30" value="${escapeHtml(item.time || '')}">
       <input type="text" class="schedule-label" placeholder="Programmpunkt (z.B. Einlass)" value="${escapeHtml(item.label || '')}">
       <input type="text" class="schedule-note" placeholder="Beschreibung (optional)" value="${escapeHtml(item.note || '')}">
       <div class="schedule-row-actions">
-        <button type="button" class="up" title="Nach oben">↑</button>
-        <button type="button" class="down" title="Nach unten">↓</button>
         <button type="button" class="remove" title="Entfernen">×</button>
       </div>`;
-    row.querySelector('.up').addEventListener('click', () => {
-      const prev = row.previousElementSibling;
-      if (prev) scheduleList.insertBefore(row, prev);
-    });
-    row.querySelector('.down').addEventListener('click', () => {
-      const next = row.nextElementSibling;
-      if (next) scheduleList.insertBefore(next, row);
-    });
     row.querySelector('.remove').addEventListener('click', () => row.remove());
+
+    // Drag-and-Drop zum Umsortieren
+    row.addEventListener('dragstart', () => row.classList.add('dragging'));
+    row.addEventListener('dragend', () => row.classList.remove('dragging'));
+
     scheduleList.appendChild(row);
   }
+
+  scheduleList.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const dragging = scheduleList.querySelector('.dragging');
+    if (!dragging) return;
+    const afterEl = [...scheduleList.querySelectorAll('.schedule-row:not(.dragging)')].find(row => {
+      const box = row.getBoundingClientRect();
+      return e.clientY < box.top + box.height / 2;
+    });
+    if (afterEl) scheduleList.insertBefore(dragging, afterEl);
+    else scheduleList.appendChild(dragging);
+  });
 
   function renderScheduleRows(items){
     scheduleList.innerHTML = '';
