@@ -377,6 +377,7 @@
       <button type="button" id="addCompanionFieldBtn">+ Begleitung hinzufügen</button>
       <div class="add-form-actions">
         <button id="addSaveBtn">Anlegen</button>
+        <button id="addPayNowBtn" style="background:var(--success); color:#0a0e1a;">Anlegen &amp; gleich bezahlen</button>
         <button id="addCancelBtn" class="secondary">Abbrechen</button>
       </div>
     </div>
@@ -712,6 +713,30 @@
   let scheduleLoaded = false;
   let statsSyncTimer = null;
 
+  // Während das "Manuell hinzufügen"-Formular offen ist, soll sich Tabelle/Statistik
+  // nicht live neu aufbauen (stört beim Ausfüllen) — die Daten selbst bleiben im
+  // Hintergrund trotzdem aktuell, angezeigt wird der neue Stand erst wieder, sobald
+  // das Formular geschlossen wird (Anlegen, Anlegen & Bezahlen, oder Abbrechen).
+  let addFormOpen = false;
+  let pendingRender = false;
+
+  function scheduleRender(){
+    if (addFormOpen) { pendingRender = true; return; }
+    render();
+  }
+  function scheduleCharts(){
+    if (addFormOpen) { pendingRender = true; return; }
+    updateCharts();
+  }
+  function setAddFormOpen(open){
+    addFormOpen = open;
+    if (!open && pendingRender) {
+      pendingRender = false;
+      render();
+      updateCharts();
+    }
+  }
+
   // Hält den öffentlichen Live-Ticketzähler (settings/stats) mit der echten Anzahl
   // Tickets synchron — legt das Dokument beim allerersten Mal auch gleich an.
   // Debounced, damit nicht bei jeder einzelnen Änderung sofort geschrieben wird.
@@ -897,21 +922,21 @@
   function startListening(){
     onSnapshot(query(collection(db, 'registrations'), orderBy('createdAt', 'desc')), (snap) => {
       allRegs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      render();
-      updateCharts();
+      scheduleRender();
+      scheduleCharts();
     });
     onSnapshot(collection(db, 'tickets'), (snap) => {
       allTickets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      render();
+      scheduleRender();
       syncStatsCounter();
-      updateCharts();
+      scheduleCharts();
     });
     onSnapshot(doc(db, 'settings', 'pricing'), (snap) => {
       const data = snap.exists() ? snap.data() : {};
       ticketPrices = { u18: Number(data.u18 || 0), ue18: Number(data.ue18 || 0) };
       document.getElementById('priceU18Input').value = ticketPrices.u18 || '';
       document.getElementById('priceUe18Input').value = ticketPrices.ue18 || '';
-      render();
+      scheduleRender();
     });
     onSnapshot(doc(db, 'settings', 'info'), (snap) => {
       document.getElementById('infoText').value = snap.exists() ? (snap.data().text || '') : '';
@@ -1548,7 +1573,9 @@
   }
 
   document.getElementById('addBtn').addEventListener('click', () => {
-    document.getElementById('addForm').classList.toggle('show');
+    const form = document.getElementById('addForm');
+    form.classList.toggle('show');
+    setAddFormOpen(form.classList.contains('show'));
   });
 
   document.getElementById('suggestEmailBtn').addEventListener('click', () => {
@@ -1570,9 +1597,14 @@
 
   document.getElementById('addCancelBtn').addEventListener('click', () => {
     document.getElementById('addForm').classList.remove('show');
+    setAddFormOpen(false);
   });
 
-  document.getElementById('addSaveBtn').addEventListener('click', async () => {
+  // Legt die Bestellung + Tickets an und aktualisiert Tabelle/Statistik einmalig
+  // sofort danach (unabhängig von scheduleRender, damit z.B. der Pay-Button in der
+  // Tabelle für "Anlegen & gleich bezahlen" direkt existiert). Gibt die neue
+  // Registrations-ID zurück, oder null bei einem Validierungsfehler.
+  async function createManualRegistration(){
     const name = document.getElementById('addName').value.trim();
     const email = document.getElementById('addEmail').value.trim();
     const category = document.getElementById('addCategory').value;
@@ -1584,33 +1616,68 @@
 
     if(!name || !email || !category){
       alert('Bitte Name, E-Mail und Altersgruppe des Bestellers ausfüllen.');
-      return;
+      return null;
     }
     if(companions.some(c => !c.category)){
       alert('Bitte bei jeder Begleitung die Altersgruppe angeben.');
-      return;
+      return null;
     }
 
     const regRef = await addDoc(collection(db, 'registrations'), {
       name, email, category, companions, paid: false, createdAt: serverTimestamp()
     });
 
+    const attendees = [{ name, category }, ...companions];
+    const ticketRefs = attendees.map(() => doc(collection(db, 'tickets')));
     const batch = writeBatch(db);
-    [{ name, category }, ...companions].forEach(attendee => {
-      const ticketRef = doc(collection(db, 'tickets'));
-      batch.set(ticketRef, {
+    attendees.forEach((attendee, i) => {
+      batch.set(ticketRefs[i], {
         registrationId: regRef.id, name: attendee.name, category: attendee.category, email,
         ticketId: genTicketId(), paid: false, checkedIn: false, createdAt: serverTimestamp()
       });
     });
     await batch.commit();
 
+    // Lokal sofort ergänzen (statt auf den Firestore-Listener zu warten), damit
+    // Tabelle/Statistik/Cash-Popup unmittelbar den neuen Stand zeigen.
+    const now = new Date();
+    allRegs.unshift({ id: regRef.id, name, email, category, companions, paid: false, createdAt: now });
+    attendees.forEach((attendee, i) => {
+      allTickets.push({
+        id: ticketRefs[i].id, registrationId: regRef.id, name: attendee.name, category: attendee.category,
+        email, ticketId: null, paid: false, checkedIn: false, createdAt: now
+      });
+    });
+    render();
+    updateCharts();
+
     document.getElementById('addName').value = '';
     document.getElementById('addEmail').value = '';
     document.getElementById('addCategory').value = '';
+    resetCustomSelectVisual(document.getElementById('addCategory'));
     document.getElementById('addKlasse').value = '';
     companionsBlock.innerHTML = '';
+
+    return regRef.id;
+  }
+
+  document.getElementById('addSaveBtn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const regId = await createManualRegistration().finally(() => { btn.disabled = false; });
+    if (!regId) return;
     document.getElementById('addForm').classList.remove('show');
+    setAddFormOpen(false);
+  });
+
+  document.getElementById('addPayNowBtn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const regId = await createManualRegistration().finally(() => { btn.disabled = false; });
+    if (!regId) return;
+    document.getElementById('addForm').classList.remove('show');
+    setAddFormOpen(false);
+    openCashModal(regId);
   });
 
   document.getElementById('priceSaveBtn').addEventListener('click', async () => {
