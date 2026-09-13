@@ -346,6 +346,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="orders">Bestellungen</button>
     <button class="tab-btn" data-tab="insights">Insights</button>
+    <button class="tab-btn" data-tab="ratings">⭐ Bewertungen</button>
     <button class="tab-btn" data-tab="settings">⚙️ Einstellungen</button>
   </div>
 
@@ -407,6 +408,24 @@
         <div class="insight-title">Anmeldungen pro Tag</div>
         <canvas id="chartDaily"></canvas>
       </div>
+    </div>
+  </div>
+
+  <!-- Tab: Bewertungen -->
+  <div class="tab-content" data-tab-content="ratings">
+    <div class="stats" style="margin-bottom:24px;">
+      <div class="stat"><div class="num" id="statRatingAvg">–</div><div class="lbl">Ø Sterne</div></div>
+      <div class="stat"><div class="num" id="statRatingCount">0</div><div class="lbl">Bewertungen</div></div>
+    </div>
+    <div class="insights-grid" style="margin-bottom:24px;">
+      <div class="insight-card wide">
+        <div class="insight-title">Sterne-Verteilung</div>
+        <canvas id="chartRatings"></canvas>
+      </div>
+    </div>
+    <div class="table-wrap" style="padding:16px;">
+      <div style="font-size:13px; color:var(--text-dim); margin-bottom:12px; font-weight:600;">Kommentare</div>
+      <div id="ratingsCommentList" style="display:flex; flex-direction:column; gap:10px;"></div>
     </div>
   </div>
 
@@ -763,7 +782,7 @@
     console.error('Chart.js konnte nicht geladen werden — Diagramme sind deaktiviert, der Rest funktioniert normal.');
   }
 
-  let chartCategory = null, chartPaid = null, chartDaily = null;
+  let chartCategory = null, chartPaid = null, chartDaily = null, chartRatings = null;
 
   function tsToDate(ts){
     if (!ts) return null;
@@ -845,6 +864,48 @@
     }
   }
 
+  let allRatings = [];
+
+  function renderRatings(){
+    const ratingsCanvas = document.getElementById('chartRatings');
+    if (!ratingsCanvas) return;
+
+    const count = allRatings.length;
+    const avg = count ? allRatings.reduce((sum, r) => sum + (Number(r.stars) || 0), 0) / count : 0;
+    document.getElementById('statRatingAvg').textContent = count ? avg.toFixed(1) + ' ★' : '–';
+    document.getElementById('statRatingCount').textContent = count;
+
+    const distribution = [1,2,3,4,5].map(v => allRatings.filter(r => Number(r.stars) === v).length);
+
+    if (chartRatings) chartRatings.destroy();
+    chartRatings = new Chart(ratingsCanvas, {
+      type: 'bar',
+      data: {
+        labels: ['1 ★','2 ★','3 ★','4 ★','5 ★'],
+        datasets: [{ data: distribution, backgroundColor: '#ffd27f', borderRadius: 6 }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        maintainAspectRatio: true,
+      }
+    });
+
+    const withComments = allRatings
+      .filter(r => (r.comment || '').trim())
+      .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0));
+
+    const list = document.getElementById('ratingsCommentList');
+    if (!list) return;
+    list.innerHTML = withComments.length
+      ? withComments.map(r => `
+        <div style="padding:12px 14px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-sm);">
+          <div style="color:#ffd27f; font-size:13px; margin-bottom:4px;">${'★'.repeat(Number(r.stars)||0)}${'☆'.repeat(5-(Number(r.stars)||0))}</div>
+          <div style="font-size:13.5px;">${escapeHtml(r.comment)}</div>
+        </div>`).join('')
+      : '<div style="color:var(--text-dim); font-size:13px;">Noch keine Kommentare.</div>';
+  }
+
   const DEFAULT_SCHEDULE = [
     { time: '17:30', label: 'Einlass', note: 'Ankommen, Garderobe, erste Getränke' },
     { time: '18:00', label: 'Eröffnung', note: 'Begrüßung und Auftakt des Abends' },
@@ -916,6 +977,7 @@
       btn.classList.add('active');
       document.querySelector(`[data-tab-content="${btn.dataset.tab}"]`).classList.add('active');
       if (btn.dataset.tab === 'insights') updateCharts();
+      if (btn.dataset.tab === 'ratings') renderRatings();
     });
   });
 
@@ -930,6 +992,10 @@
       scheduleRender();
       syncStatsCounter();
       scheduleCharts();
+    });
+    onSnapshot(collection(db, 'ratings'), (snap) => {
+      allRatings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderRatings();
     });
     onSnapshot(doc(db, 'settings', 'pricing'), (snap) => {
       const data = snap.exists() ? snap.data() : {};
@@ -1639,14 +1705,22 @@
     await batch.commit();
 
     // Lokal sofort ergänzen (statt auf den Firestore-Listener zu warten), damit
-    // Tabelle/Statistik/Cash-Popup unmittelbar den neuen Stand zeigen.
+    // Tabelle/Statistik/Cash-Popup unmittelbar den neuen Stand zeigen. Der Listener
+    // aus startListening() kann aber genau in diesem Moment (während des Schreibens
+    // oben) schon selbst mit den frischen Firestore-Daten dazwischenfunken — daher
+    // hier zur Sicherheit auf Duplikate prüfen, statt blind einzufügen.
     const now = new Date();
-    allRegs.unshift({ id: regRef.id, name, email, category, companions, paid: false, createdAt: now });
+    if (!allRegs.some(r => r.id === regRef.id)) {
+      allRegs.unshift({ id: regRef.id, name, email, category, companions, paid: false, createdAt: now });
+    }
     attendees.forEach((attendee, i) => {
-      allTickets.push({
-        id: ticketRefs[i].id, registrationId: regRef.id, name: attendee.name, category: attendee.category,
-        email, ticketId: null, paid: false, checkedIn: false, createdAt: now
-      });
+      const ticketDocId = ticketRefs[i].id;
+      if (!allTickets.some(t => t.id === ticketDocId)) {
+        allTickets.push({
+          id: ticketDocId, registrationId: regRef.id, name: attendee.name, category: attendee.category,
+          email, ticketId: null, paid: false, checkedIn: false, createdAt: now
+        });
+      }
     });
     render();
     updateCharts();
