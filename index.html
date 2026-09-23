@@ -2646,10 +2646,13 @@
         })
       });
 
-      if(!res.ok) throw new Error('Ticket-Mail fehlgeschlagen');
+      if(!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server meldet HTTP ${res.status}`);
+      }
     } catch(err){
       console.error(err);
-      alert('Als bezahlt markiert, aber Ticket-Mail konnte nicht verschickt werden. Bitte manuell prüfen.');
+      alert('Als bezahlt markiert, aber Ticket-Mail konnte nicht verschickt werden:\n\n' + err.message);
       btnEl.disabled = false;
       btnEl.textContent = 'Erneut versuchen';
     }
