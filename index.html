@@ -6516,7 +6516,7 @@ let allRatings = [];
 	document.getElementById('cashConfirmBtn')?.addEventListener('click', () => {
 		const { regId, btnEl, donationCents } = cashModalState;
 		closeCashModal();
-		if (regId && btnEl) markAsPaid(regId, btnEl, donationCents);
+		if (regId) markAsPaid(regId, btnEl, donationCents);
 	});
 
 	// =========================================================================
@@ -6847,7 +6847,8 @@ let allRatings = [];
  ...t,
  price: freshPrices[t.category] || 0
  })),
- useLernSax: shouldUseLernSax(email)
+ useLernSax: shouldUseLernSax(email),
+  donation: Number(reg.donation || 0)
  })
  });
  if (!res.ok) {
@@ -6942,7 +6943,8 @@ let allRatings = [];
  name: t.name, ticketId: t.ticketId, category: t.category,
  price: freshPrices[t.category] || 0
  })),
- useLernSax: shouldUseLernSax(reg.email)
+ useLernSax: shouldUseLernSax(reg.email),
+  donation: donationEuro
  })
  });
 
@@ -8041,7 +8043,8 @@ let allRatings = [];
  name: t.name, ticketId: t.ticketId, category: t.category,
  price: freshPrices[t.category] || 0
  })),
- useLernSax: shouldUseLernSax(reg.email)
+ useLernSax: shouldUseLernSax(reg.email),
+  donation: Number(reg.donation || 0)
  })
  });
  } catch(e) {
@@ -8735,5 +8738,3 @@ let allRatings = [];
 </script>
 </body>
 </html>
-
-																																		   
