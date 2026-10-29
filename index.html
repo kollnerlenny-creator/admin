@@ -525,20 +525,104 @@
  white-space: nowrap;
  flex-shrink: 0;
  }
- .stats {
- grid-template-columns: repeat(2, 1fr) !important;
- gap: 8px !important;
- margin-bottom: 18px !important;
- }
- .stat {
- padding: 12px 14px !important;
- }
- .stat .num {
- font-size: 22px !important;
- }
- .stat-header {
- margin-bottom: 6px;
- }
+  /* Mobile: Schnellstatistiken NUR im Insights-Tab sichtbar & optimiertes Layout */
+  #globalStatsBar {
+    display: none; /* Auf allen anderen Tabs (Bestellungen, Einlass etc.) ausgeblendet */
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 18px !important;
+    padding: 0 !important;
+  }
+  body.mobile-tab-insights #globalStatsBar {
+    display: grid !important;
+    animation: tabFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Karten-Reihenfolge auf dem Handy für maximale Übersicht */
+  #globalStatsBar .stat:nth-child(5) { order: 1; } /* Umsatz bezahlt */
+  #globalStatsBar .stat:nth-child(6) { order: 2; } /* Vorauss. Umsatz */
+  #globalStatsBar .stat:nth-child(2) { order: 3; } /* Tickets gesamt */
+  #globalStatsBar .stat:nth-child(3) { order: 4; } /* Bezahlt */
+  #globalStatsBar .stat:nth-child(4) { order: 5; } /* Eingecheckt */
+  #globalStatsBar .stat:nth-child(1) { order: 6; } /* Bestellungen */
+  #globalStatsBar .stat:nth-child(7) {             /* Altersgruppen über volle Breite */
+    order: 7;
+    grid-column: span 2 !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 12px 14px !important;
+  }
+  #globalStatsBar .stat:nth-child(7) .stat-header {
+    margin-bottom: 0 !important;
+  }
+  #globalStatsBar .stat:nth-child(7) .stat-sub {
+    margin-top: 2px !important;
+    text-align: right !important;
+  }
+
+  /* Touch-freundliches, kompaktes und übersichtliches Kartendesign */
+  .stat {
+    padding: 12px 13px !important;
+    border-radius: 14px !important;
+    background: linear-gradient(145deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.02) 100%) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+  }
+  .stat-header {
+    margin-bottom: 6px !important;
+  }
+  .stat-lbl {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    color: #9aa7c2 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.35px !important;
+  }
+  .stat-icon-wrap {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 8px !important;
+  }
+  .stat-icon-wrap svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  .stat .num {
+    font-size: 19px !important;
+    font-weight: 800 !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    letter-spacing: -0.3px !important;
+  }
+  .stat .stat-sub {
+    font-size: 10.5px !important;
+    color: #7d8ba7 !important;
+    margin-top: 4px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .stat-progress {
+    margin-top: 6px !important;
+    height: 4px !important;
+  }
+
+  /* Redundantes großes Banner im Insights-Tab auf Mobile ausblenden */
+  .insights-revenue-banner {
+    display: none !important;
+  }
+
+  /* Kasse auf dem Handy komplett ausblenden */
+  .mobile-nav-item.mobile-nav-cashier,
+  .mobile-nav-item[data-tab="cashier"],
+  .tab-btn[data-tab="cashier"],
+  [data-tab="cashier"],
+  .tab-content[data-tab-content="cashier"] {
+    display: none !important;
+  }
  }
 
  /* Mobile App Bottom Navigation Bar */
@@ -3250,12 +3334,6 @@
  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
  <span>Bestellungen</span>
  <span class="mobile-nav-badge" id="mobileBadgeOrders">0</span>
- </button>
- <button type="button" class="mobile-nav-item mobile-nav-cashier" data-tab="cashier">
- <div class="cashier-icon-wrap">
- <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="7" cy="15" r="1"/><path d="M12 15h6"/></svg>
- </div>
- <span>Kasse</span>
  </button>
  <button type="button" class="mobile-nav-item" data-tab="guestlist">
  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -6852,7 +6930,10 @@ let allRatings = [];
  onAuthStateChanged(auth, (user) => {
  document.getElementById('loginCard').style.display = user ? 'none' : 'block';
  document.getElementById('dashboard').style.display = user ? 'block' : 'none';
- if(user) startListening();
+ if(user) {
+  if (typeof switchToTab === 'function') switchToTab('orders');
+  startListening();
+ }
  });
 
  async function performLogin() {
@@ -6927,32 +7008,57 @@ let allRatings = [];
 
  document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
 
- function switchToTab(tabName){
- document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
- document.querySelectorAll('.mobile-nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
- document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.dataset.tabContent === tabName));
- const globalStats = document.getElementById('globalStatsBar');
- if (globalStats) {
- globalStats.style.display = (tabName === 'insights') ? 'none' : 'grid';
- }
- if (tabName === 'cashier') {
- renderCashier();
- setTimeout(() => {
- const inp = document.getElementById('cashierSearch');
- if (inp) inp.focus();
- }, 50);
- }
- if (tabName === 'guestlist') {
- renderGuestList();
- }
- if (tabName === 'insights') {
- updateCharts();
- renderLivePresence();
- }
- if (tabName === 'ratings') renderRatings();
- if (tabName === 'poll') renderPolls();
- }
+	function switchToTab(tabName){
+		const isMobile = window.innerWidth <= 860;
+		if (isMobile && tabName === 'cashier') {
+			tabName = 'orders';
+		}
 
+		document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+		document.querySelectorAll('.mobile-nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+		document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.dataset.tabContent === tabName));
+		
+		// Am Handy: Schnellstatistiken NUR im Insights-Tab sichtbar
+		document.body.classList.toggle('mobile-tab-insights', isMobile && tabName === 'insights');
+		const globalStats = document.getElementById('globalStatsBar');
+		if (globalStats) {
+			if (isMobile) {
+				globalStats.style.display = (tabName === 'insights') ? 'grid' : 'none';
+			} else {
+				globalStats.style.display = (tabName === 'insights') ? 'none' : 'grid';
+			}
+		}
+		if (tabName === 'cashier') {
+			renderCashier();
+			setTimeout(() => {
+				const inp = document.getElementById('cashierSearch');
+				if (inp) inp.focus();
+			}, 50);
+		}
+		if (tabName === 'guestlist') {
+			renderGuestList();
+		}
+		if (tabName === 'insights') {
+			updateCharts();
+			renderLivePresence();
+		}
+		if (tabName === 'ratings') renderRatings();
+		if (tabName === 'poll') renderPolls();
+	}
+
+	window.addEventListener('resize', () => {
+		const isMobile = window.innerWidth <= 860;
+		const activeTab = document.querySelector('.tab-content.active')?.dataset?.tabContent || 'orders';
+		document.body.classList.toggle('mobile-tab-insights', isMobile && activeTab === 'insights');
+		const globalStats = document.getElementById('globalStatsBar');
+		if (globalStats) {
+			if (isMobile) {
+				globalStats.style.display = (activeTab === 'insights') ? 'grid' : 'none';
+			} else {
+				globalStats.style.display = (activeTab === 'insights') ? 'none' : 'grid';
+			}
+		}
+	});
  document.querySelectorAll('.tab-btn').forEach(btn => {
  btn.addEventListener('click', () => switchToTab(btn.dataset.tab));
  });
