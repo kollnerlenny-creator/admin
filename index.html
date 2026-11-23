@@ -3189,7 +3189,7 @@
  <input type="email" id="editRegEmailInput"
  style="padding:10px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:14px;">
  </div>
- <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+ <div id="editRegMailMethodRow" style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
  <label style="font-size:12px; color:var(--text-dim);" for="editRegMailMethod">E-Mail-Versandweg</label>
  <select id="editRegMailMethod">
  <option value="auto">Automatisch (nach Klassenstufe)</option>
@@ -6967,11 +6967,18 @@ let allRatings = [];
  return false;
  }
 
+ function isLernSaxEmail(email){
+ const parts = String(email || '').trim().toLowerCase().split('@');
+ const domain = parts[1] || '';
+ return domain === 'lernsax.de' || domain.endsWith('.lernsax.de');
+ }
+
  function normalizeMailMethod(val){
  return (val === 'lernsax' || val === 'brevo') ? val : 'auto';
  }
 
  function resolveUseLernSax(reg){
+ if (!isLernSaxEmail(reg?.email)) return false;
  const mode = normalizeMailMethod(reg?.mailMethod);
  if (mode === 'lernsax') return true;
  if (mode === 'brevo') return false;
@@ -6992,14 +6999,18 @@ let allRatings = [];
  }
 
  function renderMailChannelControls(r){
+ const badgeHtml = renderMailChannelBadge(r);
+ // LernSax-Auswahl & "Über LernSax senden" nur bei echten LernSax-Adressen anzeigen
+ if (!isLernSaxEmail(r?.email)) {
+ return badgeHtml ? `<div class="mail-controls-row">${badgeHtml}</div>` : '';
+ }
  const mode = normalizeMailMethod(r?.mailMethod);
  const autoTarget = shouldUseLernSax(r?.email, r?.schoolClass) ? 'LernSax' : 'Brevo';
  const modeClass = mode === 'lernsax' ? 'mode-lernsax' : (mode === 'brevo' ? 'mode-brevo' : '');
- const badgeHtml = renderMailChannelBadge(r);
  return `
  <div class="mail-controls-row">
  ${badgeHtml}
- <select class="mail-channel-select ${modeClass}" data-id="${r.id}" title="Versandweg für diese E-Mail-Adresse wählen">
+ <select class="mail-channel-select ${modeClass}" data-id="${r.id}" title="Versandweg für diese LernSax-Adresse wählen">
  <option value="auto"${mode === 'auto' ? ' selected' : ''}>Auto (${autoTarget})</option>
  <option value="lernsax"${mode === 'lernsax' ? ' selected' : ''}>LernSax ✉️</option>
  <option value="brevo"${mode === 'brevo' ? ' selected' : ''}>Brevo 🚀</option>
@@ -7014,7 +7025,10 @@ let allRatings = [];
  async function updateRegMailMethod(regId, method){
  const reg = allRegs.find(r => r.id === regId);
  if (!reg) return;
- const normalized = normalizeMailMethod(method);
+ let normalized = normalizeMailMethod(method);
+ if (!isLernSaxEmail(reg.email) && normalized === 'lernsax') {
+ normalized = 'auto';
+ }
  try {
  await updateDoc(doc(db, 'registrations', regId), { mailMethod: normalized });
  reg.mailMethod = normalized;
@@ -7035,10 +7049,15 @@ let allRatings = [];
  alert('Keine gültige E-Mail-Adresse für diese Bestellung hinterlegt.');
  return;
  }
+ if (channel === 'lernsax' && !isLernSaxEmail(reg.email)) {
+ alert('Der Versand über LernSax ist nur für LernSax-E-Mail-Adressen verfügbar.');
+ return;
+ }
  const tickets = ticketsFor(regId);
  const paidTickets = tickets.filter(t => t.paid === true);
  const isTicketMail = !!reg.paid || paidTickets.length > 0;
  const useLernSax = channel === 'lernsax' ? true : (channel === 'brevo' ? false : resolveUseLernSax(reg));
+ const strictLernSax = channel === 'lernsax';
 
  if (btnEl) {
  btnEl.disabled = true;
@@ -7076,6 +7095,7 @@ let allRatings = [];
  price: freshPrices[t.category] || 0
  })),
  useLernSax,
+ strictLernSax,
  donation: Number(reg.donation || 0)
  })
  });
@@ -7095,7 +7115,8 @@ let allRatings = [];
  formell: salutation === 'sie',
  greeting,
  attendeeNames,
- useLernSax
+ useLernSax,
+ strictLernSax
  })
  });
  }
@@ -7132,7 +7153,7 @@ let allRatings = [];
 
  const mailKind = isTicketMail ? 'Ticket-Mail' : 'Bestätigungsmail';
  if (channel === 'lernsax' && actualVia !== 'lernsax') {
- alert(`Hinweis: Obwohl LernSax ausgewählt war, hat der Worker über Brevo gesendet (LernSax-SMTP fehlgeschlagen oder Worker-Einstellung).\n\nEmpfänger: ${reg.email}`);
+ alert(`Hinweis: Obwohl LernSax ausgewählt war, hat der Worker über Brevo gesendet (LernSax-SMTP fehlgeschlagen oder Worker-Einstellung).\n\nEmpfänger: ${reg.email}${resData.lernSaxError ? '\n\nAntwort vom LernSax-Server:\n' + resData.lernSaxError : ''}`);
  } else if (actualVia === 'lernsax') {
  if (resData.savedToSent === true) {
  showAdminToast(`${mailKind} an ${reg.email} über LernSax ✉️ gesendet & in „${resData.sentFolder || 'Gesendet'}“ abgelegt!`);
@@ -8581,6 +8602,16 @@ let allRatings = [];
  });
  }
 
+ const editRegEmailEl = document.getElementById('editRegEmailInput');
+ if (editRegEmailEl) {
+ editRegEmailEl.addEventListener('input', () => {
+ const mailMethodRow = document.getElementById('editRegMailMethodRow');
+ if (mailMethodRow) {
+ mailMethodRow.style.display = isLernSaxEmail(editRegEmailEl.value) ? 'flex' : 'none';
+ }
+ });
+ }
+
  function makeEditCompanionRow(companion, ticketId){
  const row = document.createElement('div');
  row.className = 'companion-add-row';
@@ -8627,8 +8658,13 @@ let allRatings = [];
  }
 
  const mailMethodEl = document.getElementById('editRegMailMethod');
+ const mailMethodRow = document.getElementById('editRegMailMethodRow');
+ const isLsMail = isLernSaxEmail(reg.email);
+ if (mailMethodRow) {
+ mailMethodRow.style.display = isLsMail ? 'flex' : 'none';
+ }
  if (mailMethodEl) {
- mailMethodEl.value = normalizeMailMethod(reg.mailMethod);
+ mailMethodEl.value = isLsMail ? normalizeMailMethod(reg.mailMethod) : 'auto';
  resetCustomSelectVisual(mailMethodEl);
  }
 
@@ -8734,7 +8770,8 @@ let allRatings = [];
  // 1) Bestellungs-Grunddaten aktualisieren
  const salutation = (document.getElementById('editRegSalutation')?.value || reg.salutation || 'du').toLowerCase();
  const anrede = salutation === 'sie' ? 'Sie' : 'Du';
- const mailMethod = normalizeMailMethod(document.getElementById('editRegMailMethod')?.value || reg.mailMethod);
+ const rawMailMethod = normalizeMailMethod(document.getElementById('editRegMailMethod')?.value || reg.mailMethod);
+ const mailMethod = isLernSaxEmail(email) ? rawMailMethod : 'auto';
 
  batch.update(doc(db, 'registrations', regId), {
  name, email, salutation, anrede, category, mailMethod,
