@@ -6944,8 +6944,8 @@ let allRatings = [];
 
  function shouldUseLernSax(email, schoolClass = null){
  if (!lernsaxThreshold) return false;
- const [local, domain] = String(email || '').toLowerCase().split('@');
- if (!domain || !domain.endsWith('lernsax.de')) return false;
+ const [local, domain] = String(email || '').trim().toLowerCase().split('@');
+ if (!domain || (domain !== 'lernsax.de' && !domain.endsWith('.lernsax.de'))) return false;
 
  // 1. Wenn Klassenstufe angegeben (z.B. "7a", "7", "Klasse 7")
  if (schoolClass) {
