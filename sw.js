@@ -1,86 +1,11330 @@
-// Winterball Admin PWA Service Worker (wb-admin-v1)
-const CACHE_NAME = 'wb-admin-v1';
-const PRECACHE_ASSETS = [
-  '/admin.html',
-  '/manifest.json',
-  '/icon.svg',
-  '/apple-touch-icon.png',
-  '/favicon-32.png',
-  '/favicon-16.png',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js'
-];
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<script>
+ // Circular-safe JSON.stringify guard to prevent host logger crashes on circular references
+ (function(){
+ const _orig = JSON.stringify;
+ JSON.stringify = function(val, replacer, space) {
+ const seen = new WeakSet();
+ function safeReplacer(k, v) {
+ if (typeof v === 'object' && v !== null) {
+ if (seen.has(v)) return '[Circular]';
+ seen.add(v);
+ }
+ return typeof replacer === 'function' ? replacer.call(this, k, v) : v;
+ }
+ try {
+ return _orig.call(JSON, val, replacer, space);
+ } catch (err) {
+ if (err && err.message && err.message.includes('circular')) {
+ try { return _orig.call(JSON, val, safeReplacer, space); } catch (_) { return '"{}"'; }
+ }
+ throw err;
+ }
+ };
+ })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>Winterball · Admin</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#070b16">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WB Admin">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<style>
+ :root{
+ --bg-1:#070b16; --bg-2:#0f172a;
+ --glass:rgba(255,255,255,0.05); --glass-border:rgba(255,255,255,0.11);
+ --glass-hover:rgba(255,255,255,0.09);
+ --text:#eef2fb; --text-dim:#9aa7c2;
+ --accent:#8fb4ff; --accent-glow:#c5d8ff;
+ --success:#7fe0a8; --error:#ff8080; --warn:#ffd27f;
+ --radius:16px; --radius-sm:10px;
+ }
+ *{box-sizing:border-box; margin:0; padding:0;}
+ body{
+ font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+ background:linear-gradient(180deg, var(--bg-1), var(--bg-2));
+ color:var(--text); min-height:100vh; padding:28px 20px;
+ position:relative; overflow-x:hidden;
+ }
+ /* Ambient glass glow reflections */
+ body::before{
+ content:''; position:fixed; top:-15vw; left:-10vw; width:55vw; height:55vw;
+ background:radial-gradient(circle, rgba(143,180,255,0.12) 0%, transparent 65%);
+ pointer-events:none; z-index:-1;
+ animation:ambientFloat1 18s ease-in-out infinite alternate;
+ }
+ body::after{
+ content:''; position:fixed; bottom:-15vw; right:-10vw; width:55vw; height:55vw;
+ background:radial-gradient(circle, rgba(127,224,168,0.08) 0%, transparent 65%);
+ pointer-events:none; z-index:-1;
+ animation:ambientFloat2 22s ease-in-out infinite alternate;
+ }
+ @keyframes ambientFloat1{
+ 0%{ transform:translate(0, 0) scale(1); }
+ 100%{ transform:translate(5vw, 3vw) scale(1.08); }
+ }
+ @keyframes ambientFloat2{
+ 0%{ transform:translate(0, 0) scale(1); }
+ 100%{ transform:translate(-4vw, -3vw) scale(1.06); }
+ }
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
-        console.warn('PWA precache warning:', err);
-      });
-    }).then(() => self.skipWaiting())
-  );
-});
+ .wrap{max-width:min(1420px, 96vw); margin:0 auto;}
+ h1{font-weight:400; font-size:26px; margin-bottom:4px; letter-spacing:-0.3px;}
+ .sub{color:var(--text-dim); font-size:13px; margin-bottom:26px;}
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      );
-    }).then(() => self.clients.claim())
-  );
-});
+ .login-card{
+ max-width:380px; margin:90px auto; padding:36px;
+ background:linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+ backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%);
+ border:1px solid rgba(255,255,255,0.14); border-radius:var(--radius);
+ text-align:center; box-shadow:0 24px 60px rgba(0,0,0,0.5);
+ }
+ .login-card input{
+ width:100%; padding:13px 15px; margin-top:12px; background:rgba(255,255,255,0.05);
+ border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:14px;
+ transition:all 0.2s ease;
+ }
+ .login-card input:focus{
+ outline:none; border-color:var(--accent); background:rgba(255,255,255,0.08);
+ box-shadow:0 0 0 3px rgba(143,180,255,0.18);
+ }
+ .login-card button{
+ width:100%; margin-top:16px; padding:13px; border:none; border-radius:var(--radius-sm);
+ background:linear-gradient(135deg, #8fb4ff, #adcaff); color:#080c16; font-weight:700; cursor:pointer;
+ font-size:14.5px; box-shadow:0 6px 20px rgba(143,180,255,0.3); transition:all 0.2s ease;
+ }
+ .login-card button:hover{transform:translateY(-1px); filter:brightness(1.08);}
+ .login-error{color:var(--error); font-size:13px; margin-top:12px; display:none;}
 
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+ .admin-header{
+ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px;
+ flex-wrap:wrap; gap:16px;
+ }
+ .admin-title-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+ .admin-header-actions{display:flex; align-items:center; gap:10px;}
+ .header-action-btn{
+ padding:9px 15px; border-radius:var(--radius-sm); border:1px solid var(--glass-border);
+ background:linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+ backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+ color:var(--text); font-size:13px; font-weight:600; cursor:pointer;
+ display:inline-flex; align-items:center; gap:7px;
+ transition:all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+ .header-action-btn:hover{
+ background:rgba(255,255,255,0.11); border-color:rgba(143,180,255,0.4);
+ transform:translateY(-1px);
+ }
+ .header-action-btn:active{transform:scale(0.97);}
+ .header-action-btn.logout{
+ color:var(--error); border-color:rgba(255,128,128,0.28); background:rgba(255,128,128,0.06);
+ }
+ .header-action-btn.logout:hover{background:rgba(255,128,128,0.14); border-color:rgba(255,128,128,0.45);}
+ .header-action-btn svg{width:15px; height:15px; stroke-width:2.2; flex-shrink:0;}
 
-  // Niemals Firebase, Cloudflare Worker APIs oder interne Proxies cachen
-  if (
-    url.pathname.startsWith('/api') ||
-    url.hostname.includes('firebase') ||
-    url.hostname.includes('googleapis.com') ||
-    url.hostname.includes('workers.dev') ||
-    event.request.method !== 'GET'
-  ) {
-    return;
+ .live-pill{
+ display:inline-flex; align-items:center; gap:7px; font-size:11px; font-weight:700;
+ letter-spacing:0.5px; text-transform:uppercase; color:var(--success);
+ background:rgba(127,224,168,0.1); border:1px solid rgba(127,224,168,0.3);
+ border-radius:100px; padding:4px 12px; backdrop-filter:blur(10px);
+ }
+ .pulse-dot{
+ width:7px; height:7px; border-radius:50%; background:#7fe0a8;
+ box-shadow:0 0 0 0 rgba(127,224,168,0.7); animation:pulseGreen 2s infinite;
+ }
+ @keyframes pulseGreen{
+ 0%{ box-shadow:0 0 0 0 rgba(127,224,168,0.6); }
+ 70%{ box-shadow:0 0 0 6px rgba(127,224,168,0); }
+ 100%{ box-shadow:0 0 0 0 rgba(127,224,168,0); }
+ }
+
+ /* Stats Cards Grid */
+ .stats{
+ display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr));
+ gap:14px; margin-bottom:26px;
+ }
+ .stat{
+ background:linear-gradient(145deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.02) 100%);
+ border:1px solid var(--glass-border); border-radius:var(--radius);
+ padding:18px; backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 30px rgba(0,0,0,0.32);
+ transition:all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+ display:flex; flex-direction:column; justify-content:space-between;
+ position:relative; overflow:hidden;
+ }
+ .stat:hover{
+ border-color:rgba(143,180,255,0.38); transform:translateY(-3px);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,0.16), 0 16px 40px rgba(0,0,0,0.5), 0 0 20px rgba(143,180,255,0.12);
+ }
+ .stat-header{
+ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px;
+ }
+ .stat-lbl{
+ font-size:12.5px; font-weight:600; color:var(--text-dim); letter-spacing:0.2px;
+ }
+ .stat-icon-wrap{
+ width:32px; height:32px; border-radius:9px;
+ display:flex; align-items:center; justify-content:center;
+ background:rgba(143,180,255,0.12); border:1px solid rgba(143,180,255,0.25);
+ color:var(--accent); flex-shrink:0; transition:all 0.2s ease;
+ }
+ .stat-icon-wrap svg{width:16px; height:16px; stroke-width:2;}
+ .stat-icon-wrap.success{background:rgba(127,224,168,0.12); border-color:rgba(127,224,168,0.25); color:var(--success);}
+ .stat-icon-wrap.warn{background:rgba(255,210,127,0.12); border-color:rgba(255,210,127,0.25); color:var(--warn);}
+ .stat-icon-wrap.error{background:rgba(255,128,128,0.12); border-color:rgba(255,128,128,0.25); color:var(--error);}
+ .stat:hover .stat-icon-wrap{transform:scale(1.08);}
+
+ .stat .num{font-size:27px; font-weight:700; color:#fff; line-height:1.15; letter-spacing:-0.5px;}
+ .stat .num.accent{color:var(--accent-glow);}
+ .stat .num.success{color:var(--success);}
+ .stat .num.warn{color:var(--warn);}
+ .stat .stat-sub{font-size:11.5px; color:var(--text-dim); margin-top:6px;}
+
+ .stat-progress{
+ margin-top:10px; width:100%; height:5px; border-radius:3px;
+ background:rgba(255,255,255,0.08); overflow:hidden;
+ }
+ .stat-progress-fill{
+ height:100%; width:0%; border-radius:3px;
+ background:linear-gradient(90deg, var(--accent), var(--success));
+ transition:width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+
+ /* Glass Tab Bar */
+ .tabs{
+ display:flex; gap:6px; margin-bottom:24px;
+ background:rgba(255,255,255,0.035); padding:6px; border-radius:var(--radius);
+ border:1px solid var(--glass-border);
+ backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+ overflow-x:auto; scrollbar-width:none;
+ }
+ .tabs::-webkit-scrollbar{display:none;}
+ .tab-btn{
+ padding:11px 18px; border:1px solid transparent; border-radius:12px;
+ background:transparent; color:var(--text-dim); font-size:13.5px; font-weight:600;
+ cursor:pointer; transition:all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+ display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
+ }
+ .tab-btn:hover{color:var(--text); background:rgba(255,255,255,0.06);}
+ .tab-btn.active{
+ color:#fff; background:rgba(143,180,255,0.16);
+ border-color:rgba(143,180,255,0.35);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 18px rgba(143,180,255,0.18);
+ }
+ .tab-btn svg{width:16px; height:16px; stroke-width:2.2; flex-shrink:0;}
+ .tab-badge{
+ font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:100px;
+ background:rgba(255,255,255,0.08); color:var(--text); line-height:1;
+ transition:all 0.2s ease;
+ }
+ .tab-btn.active .tab-badge{
+ background:rgba(143,180,255,0.3); color:#fff;
+ }
+
+ /* Tab switching animation */
+ .tab-content{display:none;}
+ .tab-content.active{
+ display:block;
+ animation:tabFadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+ }
+ @keyframes tabFadeIn{
+ from{ opacity:0; transform:translateY(10px) scale(0.995); }
+ to{ opacity:1; transform:translateY(0) scale(1); }
+ }
+
+ /* Toolbars & Filters */
+ .toolbar-container{display:flex; flex-direction:column; gap:14px; margin-bottom:20px;}
+ .toolbar-top{display:flex; gap:12px; flex-wrap:wrap; align-items:center;}
+ .search-box-wrap{position:relative; flex:1; min-width:260px; display:flex; align-items:center;}
+ .search-box-wrap input{
+ width:100%; padding:11px 40px 11px 40px;
+ background:linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
+ backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+ border:1px solid var(--glass-border); border-radius:var(--radius-sm);
+ color:var(--text); font-size:13.5px; transition:all 0.2s ease;
+ }
+ .search-box-wrap input:focus{
+ outline:none; border-color:var(--accent); background:rgba(255,255,255,0.08);
+ box-shadow:0 0 0 3px rgba(143,180,255,0.18);
+ }
+ .search-icon{
+ position:absolute; left:14px; width:16px; height:16px; color:var(--text-dim); pointer-events:none;
+ }
+ .search-clear-btn{
+ position:absolute; right:12px; background:rgba(255,255,255,0.1); border:none;
+ color:var(--text-dim); border-radius:50%; width:22px; height:22px; font-size:11px;
+ display:flex; align-items:center; justify-content:center; cursor:pointer;
+ transition:all 0.15s ease;
+ }
+ .search-clear-btn:hover{color:#fff; background:rgba(255,255,255,0.22);}
+
+ .filter-chips{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+ .chip{
+ padding:7px 14px; border-radius:100px; border:1px solid var(--glass-border);
+ background:rgba(255,255,255,0.04); color:var(--text-dim); font-size:12.5px; font-weight:600;
+ cursor:pointer; display:inline-flex; align-items:center; gap:7px;
+ transition:all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+ .chip:hover{
+ background:rgba(255,255,255,0.08); color:var(--text); border-color:rgba(143,180,255,0.3);
+ transform:translateY(-1px);
+ }
+ .chip.active{
+ background:rgba(143,180,255,0.18); border-color:var(--accent); color:#fff;
+ box-shadow:0 3px 12px rgba(143,180,255,0.2);
+ }
+ .chip svg{width:13px; height:13px; stroke-width:2.2;}
+ .chip-count{
+ font-size:10.5px; padding:2px 7px; border-radius:10px;
+ background:rgba(255,255,255,0.08); color:inherit; font-weight:700;
+ }
+ .chip.active .chip-count{background:rgba(143,180,255,0.3); color:#fff;}
+ .results-badge{font-size:12px; color:var(--text-dim); margin-left:auto;}
+
+ .toolbar-actions{display:flex; gap:9px; align-items:center; flex-wrap:wrap;}
+ .toolbar-actions button{
+ padding:9px 15px; border-radius:var(--radius-sm); border:1px solid var(--glass-border);
+ background:linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+ backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+ color:var(--text); cursor:pointer; font-size:13px; font-weight:600;
+ display:inline-flex; align-items:center; gap:7px;
+ transition:all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+ .toolbar-actions button:hover{
+ background:rgba(255,255,255,0.12); border-color:rgba(143,180,255,0.4);
+ transform:translateY(-1px);
+ }
+ .toolbar-actions button:active{transform:scale(0.97);}
+ .toolbar-actions button.primary{
+ background:linear-gradient(135deg, #8fb4ff, #b6d0ff); color:#080c16;
+ font-weight:700; border:none; box-shadow:0 4px 16px rgba(143,180,255,0.32);
+ }
+ .toolbar-actions button.primary:hover{filter:brightness(1.08); box-shadow:0 6px 22px rgba(143,180,255,0.45);}
+ .toolbar-actions button svg{width:15px; height:15px; stroke-width:2.2;}
+
+ /* Glass Formular (Add Order) */
+ .add-form{
+ display:none; flex-direction:column; gap:12px; margin-bottom:20px; padding:20px;
+ background:linear-gradient(145deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.025) 100%);
+ border:1px solid rgba(143,180,255,0.28); border-radius:var(--radius);
+ backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,0.1), 0 14px 40px rgba(0,0,0,0.4);
+ }
+ .add-form.show{display:flex; animation:tabFadeIn 0.25s ease;}
+ .add-form input{
+ padding:11px 13px; background:rgba(255,255,255,0.05);
+ border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:13.5px;
+ transition:all 0.2s ease;
+ }
+ .add-form input:focus{
+ outline:none; border-color:var(--accent); background:rgba(255,255,255,0.08);
+ box-shadow:0 0 0 3px rgba(143,180,255,0.18);
+ }
+ .add-row{display:flex; gap:10px; flex-wrap:wrap;}
+ .add-row input{flex:1; min-width:160px;}
+ .add-row select{flex:0 0 100px; padding:11px 10px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:13px;}
+ .companions-block{display:flex; flex-direction:column; gap:8px;}
+ .add-companion-btn{
+ display:inline-flex; align-items:center; gap:6px; margin-top:6px; padding:5px 12px;
+ border-radius:100px; border:1px dashed rgba(143,180,255,0.4);
+ background:rgba(143,180,255,0.07); color:var(--accent); font-size:11.5px; font-weight:600; cursor:pointer;
+ transition:all 0.2s ease;
+ }
+ .add-companion-btn:hover{background:rgba(143,180,255,0.16); border-color:var(--accent); color:#fff;}
+ .companion-add-row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+ .companion-add-row input{flex:1; min-width:130px;}
+ .companion-add-row .companion-class-input{flex:0 0 110px; min-width:90px;}
+ .companion-add-row select{flex:0 0 90px; padding:10px 8px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:13px;}
+ .companion-add-row button{
+ width:36px; height:38px; border-radius:var(--radius-sm); border:1px solid rgba(255,128,128,0.3);
+ background:rgba(255,128,128,0.1); color:var(--error); cursor:pointer; font-size:16px; flex-shrink:0;
+ transition:all 0.15s ease;
+ }
+ .companion-add-row button:hover{background:rgba(255,128,128,0.22); border-color:var(--error);}
+ .add-form-actions{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;}
+ .add-form-actions button{
+ padding:11px 18px; border-radius:var(--radius-sm); border:none; cursor:pointer; font-size:13.5px; font-weight:700;
+ display:inline-flex; align-items:center; gap:6px; transition:all 0.2s ease;
+ }
+ #addSaveBtn{background:linear-gradient(135deg, #8fb4ff, #adcaff); color:#080c16;}
+ #addSaveBtn:hover{filter:brightness(1.08); transform:translateY(-1px);}
+ #addPayNowBtn{box-shadow:0 4px 16px rgba(127,224,168,0.25);}
+ #addPayNowBtn:hover{filter:brightness(1.08); transform:translateY(-1px);}
+ .add-form-actions button.secondary{
+ background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border); font-weight:500;
+ }
+ .add-form-actions button.secondary:hover{background:rgba(255,255,255,0.1);}
+ #addCompanionFieldBtn{
+ align-self:flex-start; background:none; border:none; color:var(--accent); font-size:12.5px; cursor:pointer; padding:4px 0; font-weight:600;
+ display:inline-flex; align-items:center; gap:5px;
+ }
+ #addCompanionFieldBtn:hover{color:#fff;}
+
+ /* Custom-Dropdown */
+ .cs-wrap{position:relative;}
+ .cs-wrap select{
+ position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; padding:0; border:none;
+ }
+ .cs-trigger{
+ display:flex; align-items:center; justify-content:space-between; gap:8px;
+ padding:11px 13px; font-size:13px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border);
+ border-radius:var(--radius-sm); color:var(--text); cursor:pointer; user-select:none;
+ transition:border-color 0.2s, background 0.2s;
+ }
+ .cs-trigger.placeholder{color:var(--text-dim);}
+ .cs-wrap.open .cs-trigger{border-color:var(--accent); background:rgba(255,255,255,0.08);}
+ .cs-arrow{width:7px; height:7px; border-right:2px solid var(--text-dim); border-bottom:2px solid var(--text-dim);
+ transform:rotate(45deg); transition:transform 0.2s; flex-shrink:0; margin-top:-3px;}
+ .cs-wrap.open .cs-arrow{transform:rotate(-135deg); margin-top:3px;}
+ .cs-panel{
+ position:absolute; left:0; right:0; top:calc(100% + 6px); z-index:80;
+ background:rgba(18,26,44,0.98); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+ border:1px solid var(--glass-border); border-radius:var(--radius-sm); overflow:hidden;
+ box-shadow:0 18px 45px rgba(0,0,0,0.6); max-height:220px; overflow-y:auto;
+ display:none; opacity:0; transform:translateY(-4px); transition:opacity 0.15s, transform 0.15s;
+ }
+ .cs-wrap.open .cs-panel{display:block; opacity:1; transform:translateY(0);}
+ .cs-option{padding:10px 14px; font-size:13px; color:var(--text); cursor:pointer; transition:background 0.15s;}
+ .cs-option:hover, .cs-option.active{background:rgba(143,180,255,0.16); color:#fff;}
+
+ /* Glass Table */
+ .table-wrap{
+ background:linear-gradient(145deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.02) 100%);
+ border:1px solid var(--glass-border); border-radius:var(--radius);
+ overflow-x:auto; backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 36px rgba(0,0,0,0.36);
+ }
+ table{width:100%; border-collapse:collapse; font-size:13px;}
+ thead th{
+ text-align:left; padding:13px 15px; color:var(--text-dim); font-weight:600;
+ border-bottom:1px solid var(--glass-border); font-size:11.5px; text-transform:uppercase; letter-spacing:0.6px;
+ background:rgba(255,255,255,0.025);
+ }
+ tbody tr{
+ border-bottom:1px solid rgba(255,255,255,0.04);
+ transition:all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+ tbody tr:hover{
+ background:rgba(143,180,255,0.055);
+ box-shadow:inset 3px 0 0 var(--accent);
+ }
+ tbody td{padding:12px 15px; vertical-align:middle;}
+
+ .badge{
+ display:inline-flex; align-items:center; gap:5px; padding:3px 9px;
+ border-radius:100px; font-size:11px; font-weight:700; flex-shrink:0; white-space:nowrap;
+ }
+ .badge.in{background:rgba(127,224,168,0.14); border:1px solid rgba(127,224,168,0.3); color:var(--success);}
+ .badge.out{background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); color:var(--text-dim);}
+ .badge svg{width:11px; height:11px; stroke-width:2.5;}
+
+ .pay-btn{
+ padding:6px 14px; border-radius:100px; border:1px solid rgba(255,210,127,0.45);
+ background:rgba(255,210,127,0.12); color:var(--warn); font-size:11.5px; font-weight:700; cursor:pointer;
+ white-space:nowrap; flex-shrink:0; transition:all 0.2s ease;
+ }
+ .pay-btn:hover{background:rgba(255,210,127,0.24); border-color:var(--warn); transform:translateY(-1px);}
+ .pay-btn:disabled{opacity:0.5; cursor:default;}
+
+ .action-btn-group{display:inline-flex; align-items:center; gap:6px;}
+ .delete-btn, .edit-reg-btn{
+ border-radius:var(--radius-sm); width:34px; height:34px;
+ cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+ transition:all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+ .delete-btn{
+ background:rgba(255,128,128,0.09); border:1px solid rgba(255,128,128,0.25);
+ color:var(--error);
+ }
+ .delete-btn:hover{
+ background:rgba(255,128,128,0.22); border-color:var(--error); transform:translateY(-1px);
+ }
+ .edit-reg-btn{
+ background:rgba(143,180,255,0.09); border:1px solid rgba(143,180,255,0.28);
+ color:var(--accent); margin-right:4px;
+ }
+ .edit-reg-btn:hover{
+ background:rgba(143,180,255,0.22); border-color:var(--accent); transform:translateY(-1px);
+ }
+ .delete-btn svg, .edit-reg-btn svg{width:15px; height:15px; stroke-width:2;}
+
+ .attendee-list{list-style:none; font-size:12px; color:var(--text-dim);}
+ .attendee-list li{margin-bottom:3px; display:flex; align-items:center; gap:6px;}
+ .attendee-list .orderer{color:#fff; font-weight:600; font-size:13px;}
+
+ .ticket-checkin-list{list-style:none; display:flex; flex-direction:column; gap:6px;}
+ .ticket-checkin-list li{display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12.5px;}
+ .checkin-toggle{
+ padding:5px 12px; border-radius:100px; font-size:11.5px; font-weight:600; cursor:pointer; white-space:nowrap;
+ border:1px solid var(--glass-border); background:rgba(255,255,255,0.05); color:var(--text-dim);
+ display:inline-flex; align-items:center; gap:5px; transition:all 0.2s ease;
+ }
+ .checkin-toggle:hover{background:rgba(255,255,255,0.1); color:var(--text);}
+ .checkin-toggle.in{
+ border-color:rgba(127,224,168,0.45); background:rgba(127,224,168,0.14); color:var(--success);
+ }
+ .checkin-toggle.in:hover{background:rgba(127,224,168,0.22);}
+ .checkin-toggle svg{width:12px; height:12px; stroke-width:2.6;}
+
+ .paid-cell{display:flex; align-items:center; gap:7px; flex-wrap:nowrap; white-space:nowrap;}
+ .pdf-btn, .invoice-btn{
+ padding:5px 10px; border-radius:100px; border:1px solid var(--glass-border);
+ background:rgba(255,255,255,0.05); color:var(--text); font-size:11.5px; font-weight:600;
+ cursor:pointer; white-space:nowrap; flex-shrink:0;
+ display:inline-flex; align-items:center; gap:5px; transition:all 0.2s ease;
+ }
+ .pdf-btn:hover, .invoice-btn:hover{
+ background:rgba(255,255,255,0.12); border-color:rgba(143,180,255,0.35); color:#fff;
+ transform:translateY(-1px);
+ }
+ .pdf-btn svg, .invoice-btn svg{width:12px; height:12px; stroke-width:2;}
+
+ .mail-controls-row{
+ display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-top:5px;
+ }
+ .mail-channel-select{
+ appearance:none; -webkit-appearance:none;
+ padding:3px 20px 3px 8px; border-radius:100px; font-size:10.5px; font-weight:600;
+ border:1px solid var(--glass-border);
+ background:rgba(255,255,255,0.06) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239fb0cc' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 6px center;
+ color:var(--text); cursor:pointer; outline:none; transition:all 0.18s ease;
+ }
+ .mail-channel-select:hover, .mail-channel-select:focus{
+ border-color:rgba(143,180,255,0.55); background-color:rgba(143,180,255,0.12);
+ }
+ .mail-channel-select.mode-lernsax{
+ border-color:rgba(127,224,168,0.42); color:#7fe0a8; background-color:rgba(127,224,168,0.1);
+ }
+ .mail-channel-select.mode-brevo{
+ border-color:rgba(143,180,255,0.42); color:#8fb4ff; background-color:rgba(143,180,255,0.1);
+ }
+ .mail-channel-select option{background:#0f172a; color:#eef3ff;}
+ .resend-lernsax-btn{
+ padding:3px 9px; border-radius:100px; font-size:10.5px; font-weight:700;
+ border:1px solid rgba(127,224,168,0.4); background:rgba(127,224,168,0.12); color:#7fe0a8;
+ cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;
+ transition:all 0.18s ease;
+ }
+ .resend-lernsax-btn:hover:not(:disabled){
+ background:rgba(127,224,168,0.24); border-color:rgba(127,224,168,0.7); color:#fff; transform:translateY(-1px);
+ }
+ .resend-lernsax-btn:disabled{opacity:0.55; cursor:wait;}
+ .resend-lernsax-btn svg{width:11px; height:11px; stroke-width:2.2; flex-shrink:0;}
+ .manual-lernsax-btn{
+  padding:3px 9px; border-radius:100px; font-size:10.5px; font-weight:700;
+  border:1px solid rgba(143,180,255,0.4); background:rgba(143,180,255,0.12); color:#b8ceff;
+  cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;
+  transition:all 0.18s ease;
+ }
+ .manual-lernsax-btn:hover{
+  background:rgba(143,180,255,0.24); border-color:rgba(143,180,255,0.72); color:#fff; transform:translateY(-1px);
+ }
+ .manual-lernsax-modal{
+  background:#11192e; border:1px solid rgba(143,180,255,0.28); border-radius:20px;
+  width:min(620px, 95vw); max-height:90vh; overflow-y:auto; padding:22px 22px 20px;
+  box-shadow:0 24px 64px rgba(0,0,0,0.65); color:var(--text);
+ }
+ .manual-copy-row{
+  display:flex; gap:8px; align-items:stretch;
+ }
+ .manual-copy-row input, .manual-copy-row textarea{
+  flex:1; min-width:0; padding:9px 11px; background:rgba(255,255,255,0.05);
+  border:1px solid var(--glass-border); border-radius:10px; color:#eef3ff;
+  font-size:12.5px; font-family:inherit;
+ }
+ .manual-copy-row textarea{
+  min-height:190px; resize:vertical; line-height:1.5; font-size:12px;
+ }
+ .manual-copy-btn{
+  padding:8px 12px; border-radius:10px; border:1px solid rgba(143,180,255,0.4);
+  background:rgba(143,180,255,0.14); color:#d8e6ff; font-size:12px; font-weight:600;
+  cursor:pointer; white-space:nowrap; transition:all 0.16s ease; align-self:flex-start;
+ }
+ .manual-copy-btn:hover{
+  background:rgba(143,180,255,0.28); color:#fff;
+ }
+ .manual-lernsax-error{
+  display:none; margin-bottom:14px; padding:11px 13px; border-radius:12px;
+  background:rgba(255,90,105,0.14); border:1px solid rgba(255,110,125,0.48);
+  color:#ffd6da; font-size:12px; line-height:1.5;
+ }
+ .manual-lernsax-error.show{display:block;}
+ .manual-lernsax-attach-row{
+  display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;
+ }
+ .manual-lernsax-attach-row button, .manual-lernsax-open-link{
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  padding:8px 13px; border-radius:10px; font-size:12px; font-weight:600;
+  text-decoration:none; cursor:pointer; transition:all 0.16s ease;
+ }
+ .manual-lernsax-open-link{
+  border:1px solid rgba(127,224,168,0.45); background:rgba(127,224,168,0.14); color:#8be8b2;
+ }
+ .manual-lernsax-open-link:hover{
+  background:rgba(127,224,168,0.26); color:#fff;
+ }
+
+ /* Mobile responsive cards view */
+ .mobile-cards-wrap{display:none; flex-direction:column; gap:14px;}
+ @media (max-width:860px){
+ body {
+ padding: 12px 10px calc(88px + env(safe-area-inset-bottom, 12px)) 10px !important;
+ -webkit-tap-highlight-color: transparent;
+ }
+ .wrap {
+ max-width: 100% !important;
+ margin: 0 !important;
+ }
+ .desktop-table-wrap{display:none !important;}
+ .mobile-cards-wrap{display:flex;}
+ .tabs { display: none !important; }
+ 
+ .admin-header {
+ margin-bottom: 14px;
+ gap: 12px;
+ }
+ .admin-title-row {
+ gap: 8px;
+ }
+ .admin-title-row h1 {
+ font-size: 20px;
+ }
+ .admin-header-actions {
+ width: 100%;
+ overflow-x: auto;
+ padding-bottom: 4px;
+ scrollbar-width: none;
+ flex-wrap: nowrap;
+ }
+ .admin-header-actions::-webkit-scrollbar { display: none; }
+ .header-action-btn {
+ padding: 7px 11px;
+ font-size: 12px;
+ white-space: nowrap;
+ flex-shrink: 0;
+ }
+  /* Mobile: Schnellstatistiken NUR im Insights-Tab sichtbar & optimiertes Layout */
+  #globalStatsBar {
+    display: none; /* Auf allen anderen Tabs (Bestellungen, Einlass etc.) ausgeblendet */
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 18px !important;
+    padding: 0 !important;
+  }
+  body.mobile-tab-insights #globalStatsBar {
+    display: grid !important;
+    animation: tabFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
-  // Für HTML-Navigation: Network First mit Cache Fallback
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return networkResponse;
-        })
-        .catch(() => caches.match('/admin.html'))
-    );
-    return;
+  /* Karten-Reihenfolge auf dem Handy für maximale Übersicht */
+  #globalStatsBar .stat:nth-child(5) { order: 1; } /* Umsatz bezahlt */
+  #globalStatsBar .stat:nth-child(6) { order: 2; } /* Vorauss. Umsatz */
+  #globalStatsBar .stat:nth-child(2) { order: 3; } /* Tickets gesamt */
+  #globalStatsBar .stat:nth-child(3) { order: 4; } /* Bezahlt */
+  #globalStatsBar .stat:nth-child(4) { order: 5; } /* Eingecheckt */
+  #globalStatsBar .stat:nth-child(1) { order: 6; } /* Bestellungen */
+  #globalStatsBar .stat:nth-child(7) {             /* Altersgruppen über volle Breite */
+    order: 7;
+    grid-column: span 2 !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 12px 14px !important;
+  }
+  #globalStatsBar .stat:nth-child(7) .stat-header {
+    margin-bottom: 0 !important;
+  }
+  #globalStatsBar .stat:nth-child(7) .stat-sub {
+    margin-top: 2px !important;
+    text-align: right !important;
   }
 
-  // Für statische Assets: Cache First mit Network Fallback
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Im Hintergrund aktualisieren (stale-while-revalidate)
-        fetch(event.request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-            }
-          })
-          .catch(() => {});
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return networkResponse;
-      });
-    })
-  );
-});
+  /* Touch-freundliches, kompaktes und übersichtliches Kartendesign */
+  .stat {
+    padding: 12px 13px !important;
+    border-radius: 14px !important;
+    background: linear-gradient(145deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.02) 100%) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+  }
+  .stat-header {
+    margin-bottom: 6px !important;
+  }
+  .stat-lbl {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    color: #9aa7c2 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.35px !important;
+  }
+  .stat-icon-wrap {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 8px !important;
+  }
+  .stat-icon-wrap svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  .stat .num {
+    font-size: 19px !important;
+    font-weight: 800 !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    letter-spacing: -0.3px !important;
+  }
+  .stat .stat-sub {
+    font-size: 10.5px !important;
+    color: #7d8ba7 !important;
+    margin-top: 4px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .stat-progress {
+    margin-top: 6px !important;
+    height: 4px !important;
+  }
+
+  /* Redundantes großes Banner im Insights-Tab auf Mobile ausblenden */
+  .insights-revenue-banner {
+    display: none !important;
+  }
+
+  /* Kasse auf dem Handy komplett ausblenden */
+  .mobile-nav-item.mobile-nav-cashier,
+  .mobile-nav-item[data-tab="cashier"],
+  .tab-btn[data-tab="cashier"],
+  [data-tab="cashier"],
+  .tab-content[data-tab-content="cashier"] {
+    display: none !important;
+  }
+ }
+
+ /* Mobile App Bottom Navigation Bar */
+ .mobile-bottom-nav {
+ display: none;
+ position: fixed;
+ bottom: 0;
+ left: 0;
+ right: 0;
+ z-index: 1000;
+ background: rgba(8, 14, 28, 0.94);
+ backdrop-filter: blur(28px) saturate(180%);
+ -webkit-backdrop-filter: blur(28px) saturate(180%);
+ border-top: 1px solid rgba(255, 255, 255, 0.12);
+ padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 8px)) 8px;
+ box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.65);
+ justify-content: space-around;
+ align-items: center;
+ }
+ @media (max-width: 860px) {
+ .mobile-bottom-nav {
+ display: flex;
+ }
+ }
+ .mobile-nav-item {
+ flex: 1;
+ display: flex;
+ flex-direction: column;
+ align-items: center;
+ justify-content: center;
+ gap: 3px;
+ background: none;
+ border: none;
+ color: var(--text-dim);
+ font-family: inherit;
+ font-size: 10px;
+ font-weight: 600;
+ cursor: pointer;
+ padding: 6px 2px 4px 2px;
+ border-radius: 12px;
+ position: relative;
+ transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+ -webkit-tap-highlight-color: transparent;
+ outline: none;
+ }
+ .mobile-nav-item:active {
+ transform: scale(0.92);
+ }
+ .mobile-nav-item svg {
+ width: 20px;
+ height: 20px;
+ stroke-width: 2.1;
+ transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.2s, color 0.2s;
+ }
+ .mobile-nav-item.active {
+ color: #fff;
+ }
+ .mobile-nav-item.active svg {
+ color: var(--accent);
+ stroke: var(--accent);
+ transform: translateY(-2px);
+ filter: drop-shadow(0 0 8px rgba(143, 180, 255, 0.6));
+ }
+ .mobile-nav-item .mobile-nav-badge {
+ position: absolute;
+ top: 2px;
+ right: calc(50% - 18px);
+ background: rgba(143, 180, 255, 0.35);
+ border: 1px solid rgba(143, 180, 255, 0.6);
+ color: #fff;
+ font-size: 9px;
+ font-weight: 800;
+ padding: 1px 4px;
+ border-radius: 8px;
+ min-width: 14px;
+ text-align: center;
+ line-height: 1.1;
+ }
+ .mobile-nav-item.active::after {
+ content: '';
+ position: absolute;
+ bottom: 0px;
+ width: 18px;
+ height: 2.5px;
+ border-radius: 2px;
+ background: linear-gradient(90deg, var(--accent), var(--success));
+ box-shadow: 0 0 8px var(--accent);
+ }
+
+ /* Center Highlight for Cashier (Kasse) Button */
+ .mobile-nav-item.mobile-nav-cashier {
+ position: relative;
+ }
+ .mobile-nav-item.mobile-nav-cashier .cashier-icon-wrap {
+ width: 38px;
+ height: 38px;
+ border-radius: 12px;
+ background: linear-gradient(135deg, rgba(127, 224, 168, 0.22), rgba(127, 224, 168, 0.08));
+ border: 1px solid rgba(127, 224, 168, 0.45);
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ margin-top: -6px;
+ box-shadow: 0 4px 14px rgba(127, 224, 168, 0.25);
+ transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+ .mobile-nav-item.mobile-nav-cashier.active .cashier-icon-wrap {
+ background: linear-gradient(135deg, #7fe0a8, #58cb88);
+ border-color: #fff;
+ box-shadow: 0 6px 20px rgba(127, 224, 168, 0.5);
+ transform: translateY(-3px) scale(1.05);
+ }
+ .mobile-nav-item.mobile-nav-cashier.active .cashier-icon-wrap svg {
+ stroke: #06150b !important;
+ color: #06150b !important;
+ filter: none;
+ }
+
+ /* PWA Install Banner & Buttons */
+ .pwa-install-banner {
+ display: none;
+ align-items: center;
+ justify-content: space-between;
+ gap: 10px;
+ margin-bottom: 16px;
+ padding: 10px 14px;
+ border-radius: 14px;
+ background: linear-gradient(135deg, rgba(143, 180, 255, 0.16), rgba(127, 224, 168, 0.12));
+ border: 1px solid rgba(143, 180, 255, 0.35);
+ backdrop-filter: blur(16px);
+ -webkit-backdrop-filter: blur(16px);
+ box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+ }
+ .pwa-install-banner.show {
+ display: flex;
+ }
+ .pwa-install-left {
+ display: flex;
+ align-items: center;
+ gap: 10px;
+ }
+ .pwa-install-icon {
+ width: 36px;
+ height: 36px;
+ border-radius: 9px;
+ background: rgba(143, 180, 255, 0.25);
+ border: 1px solid rgba(143, 180, 255, 0.4);
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ flex-shrink: 0;
+ }
+ .pwa-install-text h4 {
+ font-size: 13px;
+ font-weight: 700;
+ color: #fff;
+ line-height: 1.2;
+ }
+ .pwa-install-text p {
+ font-size: 11px;
+ color: var(--text-dim);
+ margin-top: 1px;
+ }
+ .pwa-install-btn {
+ padding: 8px 14px;
+ border-radius: 10px;
+ background: linear-gradient(135deg, #8fb4ff, #adcaff);
+ color: #070c18;
+ border: none;
+ font-size: 12px;
+ font-weight: 800;
+ cursor: pointer;
+ white-space: nowrap;
+ box-shadow: 0 4px 14px rgba(143, 180, 255, 0.35);
+ }
+ .pwa-install-close {
+ background: none;
+ border: none;
+ color: var(--text-dim);
+ font-size: 18px;
+ cursor: pointer;
+ padding: 4px;
+ line-height: 1;
+ }
+
+ /* iOS Safari Guide Modal */
+ .ios-guide-modal {
+ position: fixed;
+ inset: 0;
+ background: rgba(4, 7, 16, 0.88);
+ backdrop-filter: blur(16px);
+ -webkit-backdrop-filter: blur(16px);
+ z-index: 10001;
+ display: none;
+ align-items: flex-end;
+ justify-content: center;
+ padding: 16px;
+ }
+ .ios-guide-modal.show {
+ display: flex;
+ }
+ .ios-guide-card {
+ width: 100%;
+ max-width: 440px;
+ background: linear-gradient(160deg, #131c32 0%, #0c1424 100%);
+ border: 1.5px solid rgba(143, 180, 255, 0.35);
+ border-radius: 24px;
+ padding: 24px 20px;
+ box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
+ text-align: center;
+ }
+ .ios-step {
+ display: flex;
+ align-items: center;
+ gap: 12px;
+ text-align: left;
+ background: rgba(255, 255, 255, 0.04);
+ border: 1px solid rgba(255, 255, 255, 0.08);
+ border-radius: 12px;
+ padding: 12px 14px;
+ margin-top: 10px;
+ font-size: 13px;
+ color: var(--text);
+ }
+ .ios-step-num {
+ width: 26px;
+ height: 26px;
+ border-radius: 50%;
+ background: rgba(143, 180, 255, 0.25);
+ color: var(--accent);
+ font-weight: 800;
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ font-size: 12px;
+ flex-shrink: 0;
+ }
+ .ios-icon-badge {
+ display: inline-flex;
+ align-items: center;
+ justify-content: center;
+ background: rgba(255, 255, 255, 0.12);
+ border-radius: 6px;
+ padding: 2px 7px;
+ color: #fff;
+ font-weight: 700;
+ font-size: 12px;
+ }
+
+ /* Mobile "Mehr" Sheet Modal */
+ .mobile-more-sheet {
+ position: fixed;
+ inset: 0;
+ background: rgba(4, 7, 16, 0.82);
+ backdrop-filter: blur(14px);
+ -webkit-backdrop-filter: blur(14px);
+ z-index: 10000;
+ display: none;
+ align-items: flex-end;
+ justify-content: center;
+ padding: 12px;
+ }
+ .mobile-more-sheet.show {
+ display: flex;
+ }
+ .mobile-more-card {
+ width: 100%;
+ max-width: 480px;
+ background: linear-gradient(160deg, #131c32 0%, #0c1424 100%);
+ border: 1px solid rgba(143, 180, 255, 0.28);
+ border-radius: 22px;
+ padding: 20px 18px calc(20px + env(safe-area-inset-bottom, 8px)) 18px;
+ box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+ }
+ .mobile-more-grid {
+ display: grid;
+ grid-template-columns: repeat(2, 1fr);
+ gap: 10px;
+ margin-top: 14px;
+ }
+ .mobile-more-item {
+ display: flex;
+ align-items: center;
+ gap: 10px;
+ padding: 12px 14px;
+ border-radius: 12px;
+ background: rgba(255, 255, 255, 0.04);
+ border: 1px solid var(--glass-border);
+ color: var(--text);
+ font-size: 13px;
+ font-weight: 600;
+ cursor: pointer;
+ transition: all 0.15s ease;
+ text-decoration: none;
+ }
+ .mobile-more-item:active {
+ background: rgba(143, 180, 255, 0.18);
+ border-color: var(--accent);
+ transform: scale(0.97);
+ }
+ .mobile-more-item svg {
+ width: 18px;
+ height: 18px;
+ stroke-width: 2.2;
+ color: var(--accent);
+ flex-shrink: 0;
+ }
+ .order-card{
+ background:linear-gradient(145deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.02) 100%);
+ border:1px solid var(--glass-border); border-radius:var(--radius);
+ padding:18px; backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+ display:flex; flex-direction:column; gap:12px;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 30px rgba(0,0,0,0.35);
+ }
+ .order-card-header{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+ .order-card-title{
+ font-size:15.5px; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+ }
+ .order-card-email{font-size:12px; color:var(--text-dim); margin-top:3px; word-break:break-all;}
+ .order-card-attendees{
+ background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);
+ border-radius:var(--radius-sm); padding:12px; display:flex; flex-direction:column; gap:9px;
+ }
+ .order-card-attendee{display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:13px;}
+ .order-card-footer{
+ display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;
+ padding-top:12px; border-top:1px solid rgba(255,255,255,0.06);
+ }
+ .order-card-actions{display:flex; gap:6px; align-items:center;}
+
+ /* Insights Charts & Widget Dashboard */
+ .insights-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px;}
+ .insight-card{
+ background:linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+ border:1px solid var(--glass-border); border-radius:var(--radius);
+ padding:20px; backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 30px rgba(0,0,0,0.32);
+ }
+ .insight-card.wide{grid-column:1 / -1;}
+ .insight-title{
+ font-size:13.5px; color:#fff; margin-bottom:16px; font-weight:600;
+ display:flex; align-items:center; gap:8px;
+ }
+ .insight-title svg{width:16px; height:16px; color:var(--accent); stroke-width:2;}
+ .insight-card canvas{max-height:240px;}
+
+ /* One-Glance Widget Dashboard for Insights */
+ .insights-top-bar{
+ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;
+ flex-wrap:wrap; gap:8px;
+ }
+ .insights-top-title{
+ font-size:13px; font-weight:600; color:var(--text-dim); display:flex; align-items:center; gap:8px;
+ }
+ .insights-top-title .hint-badge{
+ font-size:11px; background:rgba(143,180,255,0.12); color:#8fb4ff;
+ border:1px solid rgba(143,180,255,0.25); padding:2px 8px; border-radius:100px; font-weight:600;
+ }
+ .insights-widget-grid{
+ display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:16px;
+ }
+ @media (max-width: 1024px){
+ .insights-widget-grid{grid-template-columns:repeat(2, 1fr);}
+ }
+ @media (max-width: 640px){
+ .insights-widget-grid{grid-template-columns:1fr;}
+ }
+
+ .widget-card{
+ position:relative;
+ background:linear-gradient(145deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.02) 100%);
+ border:1px solid var(--glass-border); border-radius:var(--radius);
+ padding:13px 15px; backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px rgba(0,0,0,0.26);
+ cursor:pointer; transition:all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+ display:flex; flex-direction:column; justify-content:space-between;
+ height:195px; user-select:none; overflow:hidden;
+ }
+ .widget-card:hover{
+ transform:translateY(-2px);
+ border-color:rgba(143,180,255,0.45);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,0.15), 0 14px 32px rgba(143,180,255,0.12);
+ background:linear-gradient(145deg, rgba(255,255,255,0.085) 0%, rgba(255,255,255,0.035) 100%);
+ }
+ .widget-card.widget-card-live{
+ background:linear-gradient(145deg, rgba(16,28,48,0.85) 0%, rgba(13,44,38,0.45) 100%);
+ border-color:rgba(127,224,168,0.3);
+ }
+ .widget-card.widget-card-live:hover{
+ border-color:rgba(127,224,168,0.55);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,0.15), 0 14px 32px rgba(127,224,168,0.12);
+ }
+ .widget-card-header{
+ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;
+ }
+ .widget-card-title{
+ font-size:12.5px; font-weight:700; color:#fff; display:flex; align-items:center; gap:7px; letter-spacing:0.2px;
+ }
+ .widget-card-title svg{width:14px; height:14px; color:var(--accent); stroke-width:2.2;}
+ .widget-expand-hint{
+ display:inline-flex; align-items:center; justify-content:center;
+ width:22px; height:22px; border-radius:6px;
+ background:rgba(255,255,255,0.05); color:var(--text-dim);
+ opacity:0.6; transition:all 0.2s ease;
+ }
+ .widget-card:hover .widget-expand-hint{
+ opacity:1; color:#fff; background:rgba(143,180,255,0.25);
+ }
+ .widget-card canvas{
+ max-height:100px !important; width:100% !important;
+ }
+ .widget-card-footer{
+ display:flex; align-items:center; justify-content:space-between;
+ font-size:11px; color:var(--text-dim); padding-top:6px;
+ border-top:1px solid rgba(255,255,255,0.05);
+ }
+ .widget-card-footer .zoom-text{
+ color:#8fb4ff; font-weight:600; opacity:0; transform:translateX(-4px); transition:all 0.2s ease;
+ }
+ .widget-card:hover .widget-card-footer .zoom-text{
+ opacity:1; transform:translateX(0);
+ }
+
+ /* Widget Modal Overlay (Vergrößerte Detailansicht) */
+ .widget-modal-backdrop{
+ position:fixed; inset:0; background:rgba(6,10,18,0.85);
+ backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+ z-index:10000; display:flex; align-items:center; justify-content:center;
+ padding:20px; opacity:0; pointer-events:none;
+ transition:opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+ .widget-modal-backdrop.open{opacity:1; pointer-events:auto;}
+ .widget-modal-dialog{
+ background:linear-gradient(150deg, #131c30 0%, #0d1526 100%);
+ border:1px solid rgba(143,180,255,0.3); border-radius:16px;
+ box-shadow:0 24px 64px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.12);
+ width:100%; max-width:860px; max-height:90vh;
+ display:flex; flex-direction:column; overflow:hidden;
+ transform:scale(0.96) translateY(8px);
+ transition:transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+ .widget-modal-backdrop.open .widget-modal-dialog{
+ transform:scale(1) translateY(0);
+ }
+ .widget-modal-header{
+ padding:16px 22px; border-bottom:1px solid rgba(255,255,255,0.08);
+ display:flex; align-items:center; justify-content:space-between; gap:12px;
+ }
+ .widget-modal-header-left{display:flex; align-items:center; gap:12px;}
+ .widget-modal-icon{
+ width:36px; height:36px; border-radius:10px;
+ background:rgba(143,180,255,0.15); color:#8fb4ff;
+ display:flex; align-items:center; justify-content:center; flex-shrink:0;
+ }
+ .widget-modal-icon svg{width:20px; height:20px; stroke-width:2.2;}
+ .widget-modal-title{font-size:16px; font-weight:700; color:#fff; letter-spacing:0.2px;}
+ .widget-modal-subtitle{font-size:12px; color:var(--text-dim); margin-top:1px;}
+ .widget-modal-close-btn{
+ display:inline-flex; align-items:center; gap:6px; padding:6px 12px;
+ border-radius:8px; background:rgba(255,255,255,0.06);
+ border:1px solid rgba(255,255,255,0.1); color:var(--text-dim);
+ font-size:12px; cursor:pointer; transition:all 0.18s ease;
+ }
+ .widget-modal-close-btn:hover{
+ background:rgba(255,255,255,0.12); color:#fff; border-color:rgba(255,255,255,0.2);
+ }
+ .widget-modal-body{
+ padding:22px; overflow-y:auto; display:flex; flex-direction:column; gap:20px;
+ }
+ .widget-modal-kpis{
+ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px;
+ }
+ .widget-modal-kpi-card{
+ background:rgba(255,255,255,0.035); border:1px solid rgba(255,255,255,0.08);
+ border-radius:12px; padding:12px 14px;
+ }
+ .widget-modal-kpi-lbl{
+ font-size:11px; color:var(--text-dim); text-transform:uppercase;
+ letter-spacing:0.4px; font-weight:600;
+ }
+ .widget-modal-kpi-val{font-size:22px; font-weight:800; color:#fff; margin-top:4px;}
+ .widget-modal-kpi-sub{font-size:11px; color:#9aa7c2; margin-top:2px;}
+ .widget-modal-chart-box{
+ background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.07);
+ border-radius:12px; padding:18px; min-height:300px; position:relative;
+ }
+ .widget-modal-chart-box canvas{
+ width:100% !important; max-height:320px !important;
+ }
+ .widget-modal-table-box{
+ background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.07);
+ border-radius:12px; overflow:hidden;
+ }
+ .widget-modal-table{width:100%; border-collapse:collapse; font-size:12.5px;}
+ .widget-modal-table th{
+ background:rgba(255,255,255,0.04); padding:10px 14px;
+ text-align:left; font-weight:600; color:#9aa7c2;
+ border-bottom:1px solid rgba(255,255,255,0.06);
+ }
+ .widget-modal-table td{
+ padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.04); color:#fff;
+ }
+ .widget-modal-table tr:last-child td{border-bottom:none;}
+
+ /* Settings Sections */
+ .settings-section{margin-bottom:34px;}
+ .settings-section-title{
+ font-size:14.5px; font-weight:700; color:#fff; margin-bottom:14px;
+ padding-bottom:10px; border-bottom:1px solid var(--glass-border);
+ display:flex; align-items:center; gap:9px; letter-spacing:0.2px;
+ }
+ .settings-section-title svg{width:17px; height:17px; color:var(--accent); stroke-width:2.2;}
+
+ .price-bar{
+ display:flex; align-items:center; gap:12px; margin-bottom:20px; padding:16px 18px;
+ background:linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+ border:1px solid var(--glass-border); border-radius:var(--radius);
+ backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); flex-wrap:wrap;
+ }
+ .price-bar label{font-size:13px; color:var(--text-dim); font-weight:500;}
+ .price-bar input{
+ width:105px; padding:9px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border);
+ border-radius:var(--radius-sm); color:var(--text); font-size:14px; transition:all 0.2s ease;
+ }
+ .price-bar input:focus{
+ outline:none; border-color:var(--accent); background:rgba(255,255,255,0.08);
+ box-shadow:0 0 0 3px rgba(143,180,255,0.18);
+ }
+ .price-bar button{
+ padding:9px 16px; border-radius:var(--radius-sm); border:none;
+ background:linear-gradient(135deg, #8fb4ff, #b6d0ff); color:#080c16;
+ font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s ease;
+ }
+ .price-bar button:hover{filter:brightness(1.08); transform:translateY(-1px);}
+ .price-saved{color:var(--success); font-size:12.5px; font-weight:600; opacity:0; transition:opacity 0.3s; display:inline-flex; align-items:center; gap:5px;}
+ .price-saved.show{opacity:1;}
+
+ .info-editor{
+ margin-bottom:18px; padding:16px 18px;
+ background:linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+ border:1px solid var(--glass-border); border-radius:var(--radius);
+ backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+ }
+ .info-editor label{display:block; font-size:12.5px; color:var(--text-dim); margin-bottom:9px; line-height:1.5;}
+ .info-editor input, .info-editor textarea{
+ padding:10px 13px; background:rgba(255,255,255,0.05);
+ border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text);
+ font-size:13.5px; font-family:inherit; transition:all 0.2s ease;
+ }
+ .info-editor textarea{width:100%; min-height:75px; resize:vertical;}
+ .info-editor input:focus, .info-editor textarea:focus{
+ outline:none; border-color:var(--accent); background:rgba(255,255,255,0.08);
+ box-shadow:0 0 0 3px rgba(143,180,255,0.18);
+ }
+ .info-editor-actions{display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap;}
+ .info-editor-actions button{
+ padding:9px 16px; border-radius:var(--radius-sm); border:none;
+ background:linear-gradient(135deg, #8fb4ff, #b6d0ff); color:#080c16;
+ font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s ease;
+ }
+ .info-editor-actions button:hover{filter:brightness(1.08); transform:translateY(-1px);}
+ .info-editor-actions button.secondary{
+ background:rgba(255,255,255,0.06); color:var(--text); border:1px solid var(--glass-border); font-weight:500;
+ }
+ .info-editor-actions button.secondary:hover{background:rgba(255,255,255,0.12);}
+
+ .schedule-list{display:flex; flex-direction:column; gap:8px; margin-bottom:8px;}
+ .schedule-row{
+ display:flex; gap:9px; align-items:center; flex-wrap:wrap;
+ padding:8px 10px; border-radius:var(--radius-sm);
+ background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.06);
+ transition:all 0.2s ease;
+ }
+ .schedule-row.dragging{opacity:0.35;}
+ .schedule-row:hover{background:rgba(255,255,255,0.05); border-color:rgba(143,180,255,0.25);}
+ .drag-handle{
+ cursor:grab; color:var(--text-dim); display:flex; align-items:center; justify-content:center;
+ width:20px; height:24px; flex-shrink:0; user-select:none;
+ }
+ .drag-handle:active{cursor:grabbing;}
+ .drag-handle svg{width:14px; height:14px;}
+ .schedule-row input{
+ padding:9px 11px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border);
+ border-radius:var(--radius-sm); color:var(--text); font-size:13px; font-family:inherit;
+ }
+ .schedule-row input.schedule-time{flex:0 0 80px;}
+ .schedule-row input.schedule-label{flex:1 1 160px; min-width:140px;}
+ .schedule-row input.schedule-note{flex:1 1 220px; min-width:180px;}
+ .schedule-row-actions{display:flex; gap:4px; flex-shrink:0;}
+ .schedule-row-actions button.remove{
+ width:32px; height:34px; border-radius:var(--radius-sm); border:1px solid rgba(255,128,128,0.3);
+ background:rgba(255,128,128,0.1); color:var(--error); cursor:pointer; font-size:16px;
+ display:inline-flex; align-items:center; justify-content:center;
+ }
+ .schedule-row-actions button.remove:hover{background:rgba(255,128,128,0.22); border-color:var(--error);}
+ #scheduleAddBtn{
+ align-self:flex-start; background:none; border:none; color:var(--accent); font-size:12.5px;
+ cursor:pointer; padding:6px 0; font-weight:600; display:inline-flex; align-items:center; gap:5px;
+ }
+ #scheduleAddBtn:hover{color:#fff;}
+
+ .danger-btn{
+ padding:10px 16px; border-radius:var(--radius-sm); border:1px solid rgba(255,128,128,0.4);
+ background:rgba(255,128,128,0.12); color:var(--error); font-weight:700; font-size:13px; cursor:pointer;
+ display:inline-flex; align-items:center; gap:8px; transition:all 0.2s ease;
+ }
+ .danger-btn:hover{background:rgba(255,128,128,0.24); border-color:var(--error); transform:translateY(-1px);}
+ .danger-btn svg{width:15px; height:15px; stroke-width:2.2;}
+
+ /* Glass Popups & Modals */
+ .modal-overlay{
+ display:none; position:fixed; inset:0;
+ background:rgba(4,7,16,0.84); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+ align-items:center; justify-content:center; z-index:400; padding:20px;
+ opacity:0; transition:opacity 0.25s ease;
+ }
+ .modal-overlay.show{display:flex; opacity:1;}
+ 	/* Breitbild-Kassen-Terminal (POS) & Großes Touch-Numpad über volle Bildschirmbreite */
+	.cash-modal{
+		width: min(96vw, 1180px);
+		max-width: 1180px;
+		max-height: calc(100vh - 32px);
+		overflow-y: auto;
+		background: linear-gradient(155deg, rgba(16, 24, 48, 0.98), rgba(8, 13, 26, 0.99));
+		border: 1px solid rgba(143,180,255,0.4);
+		border-radius: 24px;
+		padding: 26px 30px;
+		box-shadow: 0 32px 100px rgba(0,0,0,0.88), 0 0 60px rgba(143,180,255,0.18);
+		transform: scale(0.95) translateY(10px);
+		transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+		position: relative;
+	}
+	#cashModalOverlay .cash-modal{
+		width: min(96vw, 1180px);
+		max-width: 1180px;
+	}
+	#addCompanionModalOverlay .cash-modal,
+	#editRegModalOverlay .cash-modal{
+		width: min(92vw, 460px);
+		max-width: 460px;
+	}
+	.modal-overlay.show .cash-modal{ transform: scale(1) translateY(0); }
+
+	.cash-modal-close-btn{
+		position: absolute; top: 18px; right: 20px;
+		width: 38px; height: 38px; border-radius: 50%;
+		border: 1px solid var(--glass-border);
+		background: rgba(255,255,255,0.06); color: var(--text-dim);
+		cursor: pointer; display: flex; align-items: center; justify-content: center;
+		transition: all 0.2s ease; z-index: 10;
+	}
+	.cash-modal-close-btn:hover{
+		background: rgba(255,128,128,0.2); border-color: rgba(255,128,128,0.4); color: var(--error);
+		transform: rotate(90deg);
+	}
+	.cash-modal-close-btn svg{ width: 17px; height: 17px; }
+
+	.cash-modal-grid{
+		display: grid;
+		grid-template-columns: 1fr 1.35fr;
+		gap: 28px;
+		align-items: stretch;
+	}
+
+	/* Linke Spalte: Übersicht & Kassenbon */
+	.cash-col-summary{
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		gap: 14px;
+		background: rgba(255,255,255,0.02);
+		border: 1px solid rgba(255,255,255,0.06);
+		border-radius: 18px;
+		padding: 20px;
+	}
+	.cash-summary-header{ margin-bottom: 2px; padding-right: 20px; }
+	.cash-pos-tag{
+		display: inline-flex; align-items: center; gap: 6px;
+		font-size: 11px; font-weight: 800; letter-spacing: 0.8px;
+		color: var(--accent); background: rgba(143,180,255,0.12);
+		border: 1px solid rgba(143,180,255,0.25); border-radius: 100px;
+		padding: 4px 11px; margin-bottom: 8px;
+	}
+	.cash-pos-tag svg{ width: 13px; height: 13px; }
+	.cash-modal-name{
+		font-size: 24px; font-weight: 800; color: #fff;
+		letter-spacing: -0.4px; line-height: 1.25; margin-bottom: 6px;
+		word-break: break-word;
+	}
+	#cashModalSubtitle{
+		font-size: 13px; color: var(--text-dim); line-height: 1.45;
+	}
+
+	/* Digitaler Bon / Anzeige */
+	.cash-display-card{
+		background: rgba(4, 9, 22, 0.6);
+		border: 1px solid rgba(143,180,255,0.16);
+		border-radius: 16px; padding: 16px 18px;
+		display: flex; flex-direction: column; gap: 8px;
+		box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
+	}
+	.cash-row{
+		display: flex; justify-content: space-between; align-items: baseline;
+		font-size: 14px; color: var(--text-dim);
+		padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+	}
+	.cash-row:last-child{ border-bottom: none; }
+	.cash-row-label{
+		display: inline-flex; align-items: center; font-weight: 600; font-size: 13.5px;
+	}
+	.cash-row strong, .cash-row-val{
+		font-size: 20px; color: #fff; font-weight: 700;
+		font-family: 'Segoe UI', system-ui, sans-serif;
+		letter-spacing: -0.3px;
+	}
+	.cash-row-given{
+		background: rgba(143,180,255,0.08);
+		border: 1px solid rgba(143,180,255,0.24);
+		border-radius: 10px; padding: 10px 14px; margin: 2px 0;
+	}
+	.cash-row-given .cash-row-label{ color: var(--accent-glow); font-weight: 700; font-size: 14px; }
+	.cash-row-given .cash-row-val.highlight{
+		font-size: 26px; color: #fff; font-weight: 800;
+		text-shadow: 0 0 16px rgba(143,180,255,0.35);
+	}
+	.cash-row.cash-donation{
+		border-top: 1px dashed rgba(255,210,127,0.35);
+		border-bottom: 1px dashed rgba(255,210,127,0.35);
+		background: rgba(255,210,127,0.08);
+		border-radius: 10px; padding: 10px 14px;
+	}
+	.cash-row.cash-donation .donation-lbl{ color: #ffd27f; font-weight: 700; }
+	.cash-row.cash-donation .donation-val{ color: #ffd27f; font-size: 22px; font-weight: 800; }
+	.cash-row.cash-change{
+		padding: 10px 14px; border-radius: 10px;
+		background: rgba(127,224,168,0.08); border: 1px solid rgba(127,224,168,0.25);
+	}
+	.cash-row.cash-change .cash-row-label{ color: var(--success); font-weight: 700; font-size: 14.5px; }
+	.cash-row.cash-change .change-val{ color: var(--success); font-size: 28px; font-weight: 800; }
+	.cash-row.cash-change.negative{
+		background: rgba(255,210,127,0.08); border-color: rgba(255,210,127,0.3);
+	}
+	.cash-row.cash-change.negative .cash-row-label{ color: var(--warn); }
+	.cash-row.cash-change.negative .change-val{ color: var(--warn); }
+
+	/* Schnellbutton Spende */
+	.donate-change-btn{
+		width: 100%; min-height: 46px; padding: 11px 16px; border-radius: 12px;
+		border: 1.5px solid rgba(255,210,127,0.55);
+		background: linear-gradient(135deg, rgba(255,210,127,0.24), rgba(255,210,127,0.09));
+		color: #ffd27f; font-size: 13.5px; font-weight: 700; cursor: pointer;
+		display: flex; align-items: center; justify-content: center; gap: 8px;
+		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+		box-shadow: 0 4px 16px rgba(255,210,127,0.18);
+	}
+	.donate-change-btn:hover{
+		background: linear-gradient(135deg, rgba(255,210,127,0.36), rgba(255,210,127,0.18)) !important;
+		border-color: #ffd27f !important; transform: translateY(-1.5px);
+		box-shadow: 0 6px 22px rgba(255,210,127,0.32);
+	}
+	.donate-change-btn:active{ transform: scale(0.98); }
+	.donate-change-btn.active{
+		background: rgba(255,210,127,0.36) !important; border-color: #ffd27f !important; color: #fff !important;
+	}
+
+	.cash-modal-actions{ display: flex; gap: 12px; margin-top: auto; padding-top: 8px; }
+	.cash-modal-actions button{
+		flex: 1; min-height: 52px; padding: 12px 18px; border-radius: 14px;
+		font-size: 15px; font-weight: 700; cursor: pointer;
+		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+	}
+	.cash-modal-actions button:not(.secondary){
+		border: none; background: linear-gradient(135deg, #7fe0a8, #58cb88);
+		color: #05140b; font-size: 16px; font-weight: 800;
+		box-shadow: 0 6px 24px rgba(127,224,168,0.35);
+	}
+	.cash-modal-actions button:not(.secondary):hover{
+		filter: brightness(1.08); transform: translateY(-2px);
+		box-shadow: 0 8px 30px rgba(127,224,168,0.45);
+	}
+	.cash-modal-actions button:not(.secondary):disabled{
+		background: rgba(127,224,168,0.18); color: rgba(255,255,255,0.32);
+		cursor: not-allowed; box-shadow: none; transform: none; filter: none;
+	}
+	.cash-modal-actions button.secondary{
+		flex: 0 0 auto; min-width: 140px;
+		border: 1px solid var(--glass-border); background: rgba(255,255,255,0.06); color: var(--text);
+	}
+	.cash-modal-actions button.secondary:hover{
+		background: rgba(255,255,255,0.12); color: #fff;
+	}
+
+	/* Rechte Spalte: Großes übersichtliches POS-Touch-Numpad & Rechner */
+	.cash-col-keypad{
+		display: flex; flex-direction: column; justify-content: space-between;
+		gap: 12px;
+	}
+
+	/* 1. LCD Eingabe-Monitor (Groß & Kristallklar) */
+	.pos-screen-card{
+		background: linear-gradient(180deg, rgba(6, 11, 24, 0.95), rgba(10, 18, 38, 0.95));
+		border: 1.5px solid rgba(143,180,255,0.3);
+		border-radius: 16px;
+		padding: 12px 18px;
+		box-shadow: inset 0 2px 8px rgba(0,0,0,0.6), 0 4px 18px rgba(0,0,0,0.25);
+	}
+	.pos-screen-header{
+		display: flex; justify-content: space-between; align-items: center;
+		margin-bottom: 4px;
+	}
+	.pos-screen-badge{
+		display: inline-flex; align-items: center; gap: 6px;
+		font-size: 11px; font-weight: 800; letter-spacing: 0.6px;
+		color: #7fe0a8; text-transform: uppercase;
+	}
+	.pos-screen-status{
+		font-size: 12px; font-weight: 600; color: var(--text-dim);
+	}
+	.pos-screen-status.status-ok{ color: #7fe0a8; font-weight: 700; }
+	.pos-screen-status.status-warn{ color: #ffd27f; font-weight: 700; }
+	.pos-screen-digits-wrap{
+		display: flex; align-items: baseline; justify-content: flex-end; gap: 8px;
+	}
+	.pos-screen-currency{
+		font-size: 26px; font-weight: 700; color: rgba(143,180,255,0.6);
+	}
+	.pos-screen-amount{
+		font-size: 44px; font-weight: 900; color: #fff;
+		font-family: 'Segoe UI', system-ui, monospace;
+		letter-spacing: -0.5px; line-height: 1.05;
+		text-shadow: 0 0 24px rgba(143,180,255,0.4);
+	}
+
+	/* 2. Schnellauswahl Scheine & Passend */
+	.pos-presets-row{
+		display: flex; gap: 8px;
+	}
+	.preset-btn{
+		flex: 1; min-height: 44px; padding: 8px 10px; border-radius: 12px;
+		font-size: 14px; font-weight: 700; cursor: pointer;
+		display: flex; align-items: center; justify-content: center; gap: 6px;
+		transition: all 0.16s ease; user-select: none;
+	}
+	.preset-btn.exact-btn{
+		flex: 1.6;
+		border: 1px solid rgba(127,224,168,0.45);
+		background: linear-gradient(135deg, rgba(127,224,168,0.22), rgba(127,224,168,0.08));
+		color: #7fe0a8;
+	}
+	.preset-btn.exact-btn:hover{
+		background: linear-gradient(135deg, rgba(127,224,168,0.36), rgba(127,224,168,0.18));
+		border-color: #7fe0a8; transform: translateY(-1px);
+	}
+	.preset-btn.bill-btn{
+		border: 1px solid rgba(143,180,255,0.25);
+		background: rgba(143,180,255,0.08);
+		color: #e2edff;
+	}
+	.preset-btn.bill-btn:hover{
+		background: rgba(143,180,255,0.22); border-color: var(--accent);
+		color: #fff; transform: translateY(-1px);
+	}
+	.preset-btn:active, .preset-btn.key-pressed{
+		transform: scale(0.96) translateY(1px);
+	}
+
+	/* 3. Das Taschenrechner-Numpad: 7-8-9 / 4-5-6 / 1-2-3 / C-0-⌫ */
+	.numpad{
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 10px;
+		flex: 1;
+		margin: 2px 0;
+	}
+	.num-btn{
+		min-height: 70px; padding: 12px 6px; border-radius: 14px;
+		border: 1.5px solid rgba(255,255,255,0.12);
+		background: linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025));
+		color: #fff; font-size: 30px; font-weight: 800; cursor: pointer;
+		display: flex; flex-direction: column; align-items: center; justify-content: center;
+		transition: all 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+		box-shadow: 0 4px 14px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.12);
+		user-select: none; -webkit-user-select: none;
+	}
+	.num-btn:hover{
+		background: linear-gradient(160deg, rgba(143,180,255,0.28), rgba(143,180,255,0.12));
+		border-color: rgba(143,180,255,0.6); color: #fff;
+		transform: scale(1.02) translateY(-1px);
+		box-shadow: 0 6px 18px rgba(143,180,255,0.24);
+	}
+	.num-btn:active, .num-btn.key-pressed{
+		transform: scale(0.96) translateY(1px);
+		background: rgba(143,180,255,0.45) !important;
+		border-color: #fff !important;
+		box-shadow: 0 0 20px rgba(143,180,255,0.6) !important;
+	}
+	.num-btn .btn-main{ line-height: 1; }
+	.num-btn .btn-sub{
+		font-size: 11px; font-weight: 600; opacity: 0.75; margin-top: 3px;
+		letter-spacing: 0.4px; text-transform: uppercase;
+	}
+	.num-btn.num-clear{
+		color: #ffd27f; border-color: rgba(255,210,127,0.35);
+		background: rgba(255,210,127,0.09);
+		font-size: 24px;
+	}
+	.num-btn.num-clear:hover{
+		background: rgba(255,210,127,0.24); border-color: #ffd27f; color: #fff;
+	}
+	.num-btn.num-back{
+		color: var(--text-dim); border-color: rgba(255,255,255,0.1);
+	}
+	.num-btn.num-back:hover{
+		color: #fff; border-color: rgba(255,255,255,0.35);
+		background: rgba(255,255,255,0.14);
+	}
+
+	/* 4. Klare Spenden-Sektion für Jahrgang 12 */
+	.pos-donation-card{
+		background: rgba(255, 210, 127, 0.05);
+		border: 1px solid rgba(255, 210, 127, 0.28);
+		border-radius: 14px;
+		padding: 10px 14px;
+		display: flex; flex-direction: column; gap: 8px;
+	}
+	.pos-donation-header{
+		display: flex; align-items: center; gap: 6px;
+		font-size: 11px; font-weight: 800; letter-spacing: 0.6px;
+		color: #ffd27f; text-transform: uppercase;
+	}
+	.pos-donation-header svg{ width: 13px; height: 13px; }
+	.pos-donation-content{
+		display: flex; flex-direction: column; gap: 6px;
+	}
+	.donation-round-btn{
+		width: 100%; min-height: 38px; padding: 7px 12px; border-radius: 9px;
+		border: 1px solid rgba(255,210,127,0.5);
+		background: linear-gradient(135deg, rgba(255,210,127,0.25), rgba(255,210,127,0.1));
+		color: #ffd27f; font-size: 13px; font-weight: 700; cursor: pointer;
+		transition: all 0.16s ease; text-align: center;
+	}
+	.donation-round-btn:hover{
+		background: rgba(255,210,127,0.35); border-color: #ffd27f;
+		transform: translateY(-1px);
+	}
+	.donation-chips-grid{
+		display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+	}
+	.donation-chip{
+		min-height: 34px; padding: 6px 8px; font-size: 13px; font-weight: 700;
+		border-radius: 8px; border: 1px solid rgba(255,210,127,0.32);
+		background: rgba(255,210,127,0.08); color: #ffd27f; cursor: pointer;
+		transition: all 0.14s ease; display: flex; align-items: center; justify-content: center;
+	}
+	.donation-chip:hover{
+		background: rgba(255,210,127,0.26) !important; border-color: #ffd27f !important;
+		transform: translateY(-1px);
+	}
+	.donation-chip:active{ transform: scale(0.96); }
+
+	/* 5. Tastatur-Statusleiste */
+	.cash-keypad-hint{
+		font-size: 11.5px; color: var(--text-dim);
+		display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
+		padding-top: 2px;
+	}
+	.hint-badge{
+		display: inline-flex; align-items: center; gap: 4px;
+	}
+	.cash-keypad-hint kbd{
+		display: inline-block; padding: 2px 5px; font-size: 10.5px; font-weight: 700;
+		color: #fff; background: rgba(255,255,255,0.12);
+		border: 1px solid rgba(255,255,255,0.22); border-radius: 4px;
+		font-family: inherit;
+	}
+
+	/* Responsive für Tablets & Smartphones */
+	@media (max-width: 860px){
+		#cashModalOverlay .cash-modal{
+			width: 96vw; max-width: 520px; padding: 20px 16px;
+			border-radius: 18px; max-height: calc(100vh - 20px);
+		}
+		.cash-modal-grid{
+			grid-template-columns: 1fr;
+			gap: 16px;
+		}
+		.cash-modal-name{ font-size: 20px; }
+		.num-btn{ min-height: 54px; font-size: 24px; border-radius: 12px; }
+		.pos-screen-amount{ font-size: 34px; }
+		.cash-modal-actions button{ min-height: 46px; }
+	}
+
+	/* Cashier POS View */
+ .cashier-container{max-width:100%; margin:0 auto; padding:4px 0 24px;}
+ .cashier-empty-state{
+ text-align:center; padding:56px 20px;
+ background:linear-gradient(145deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
+ border:1px dashed rgba(255,255,255,0.14); border-radius:var(--radius); margin-top:10px;
+ }
+ .cashier-empty-icon{
+ width:64px; height:64px; margin:0 auto 16px; border-radius:50%;
+ background:rgba(143,180,255,0.08); border:1px solid rgba(143,180,255,0.22);
+ display:flex; align-items:center; justify-content:center; color:var(--accent-glow);
+ }
+ .cashier-empty-icon svg{width:32px; height:32px;}
+ .cashier-empty-state h3{font-size:18px; font-weight:700; color:#fff; margin:0 0 8px;}
+ .cashier-empty-state p{font-size:13.5px; color:var(--text-dim); max-width:520px; margin:0 auto; line-height:1.55;}
+ .cashier-results-wrap{display:flex; flex-direction:column; gap:16px;}
+ .cashier-card{
+ background:linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025));
+ border:1px solid var(--glass-border); border-radius:var(--radius); padding:22px;
+ box-shadow:0 12px 35px rgba(0,0,0,0.35); transition:all 0.2s ease;
+ }
+ .cashier-card.is-unpaid{
+ border-color:rgba(255,210,127,0.35);
+ box-shadow:0 12px 35px rgba(0,0,0,0.35), 0 0 24px rgba(255,210,127,0.07);
+ }
+ .cashier-card.is-paid{border-color:rgba(127,224,168,0.32);}
+ .cashier-card-header{
+ display:flex; justify-content:space-between; align-items:flex-start; gap:14px;
+ flex-wrap:wrap; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.06);
+ }
+ .cashier-card-name{font-size:18px; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+ .cashier-card-meta{font-size:12.5px; color:var(--text-dim); margin-top:4px;}
+ .cashier-card-amount-box{text-align:right;}
+ .cashier-amount-due{font-size:24px; font-weight:800; color:#ffd27f; letter-spacing:-0.3px;}
+ .cashier-amount-paid{font-size:24px; font-weight:800; color:#7fe0a8; letter-spacing:-0.3px;}
+ .cashier-amount-label{font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:var(--text-dim);}
+ .cashier-tickets-section{margin-bottom:16px;}
+ .cashier-card-actions{
+ display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+ padding-top:14px; border-top:1px solid rgba(255,255,255,0.06);
+ }
+ .cashier-pay-action-btn{
+ padding:11px 20px; background:linear-gradient(135deg, #ffd27f, #f59e0b);
+ color:#0b1120; font-weight:800; font-size:14.5px; border:none; border-radius:var(--radius-sm);
+ cursor:pointer; box-shadow:0 4px 18px rgba(245,158,11,0.35); display:inline-flex;
+ align-items:center; gap:8px; transition:all 0.2s ease;
+ }
+ .cashier-pay-action-btn:hover{transform:translateY(-1px); filter:brightness(1.08); box-shadow:0 6px 22px rgba(245,158,11,0.45);}
+
+ /* Toast Notification */
+ .admin-toast{
+ position:fixed; bottom:24px; right:24px; z-index:999;
+ padding:13px 20px; border-radius:var(--radius-sm);
+ background:linear-gradient(145deg, rgba(22, 33, 62, 0.98), rgba(12, 18, 36, 0.98));
+ border:1px solid rgba(143,180,255,0.35);
+ backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+ box-shadow:0 14px 40px rgba(0,0,0,0.65), 0 0 25px rgba(143,180,255,0.15);
+ color:#fff; font-size:13.5px; font-weight:600;
+ display:flex; align-items:center; gap:10px; pointer-events:none;
+ opacity:0; transform:translateY(14px); transition:all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+ }
+ .admin-toast.show{opacity:1; transform:translateY(0);}
+ .admin-toast.success{border-color:rgba(127,224,168,0.5); color:var(--success);}
+ .admin-toast svg{width:16px; height:16px; stroke-width:2.5; flex-shrink:0;}
+
+ /* Header action button variants */
+ .header-action-btn.gold-btn{
+ background:rgba(255,210,127,0.14); border-color:rgba(255,210,127,0.4); color:#ffd27f;
+ }
+ .header-action-btn.gold-btn:hover{
+ background:rgba(255,210,127,0.24); border-color:rgba(255,210,127,0.65); color:#fff;
+ }
+ .header-action-btn.blue-btn{
+ background:rgba(143,180,255,0.14); border-color:rgba(143,180,255,0.4); color:var(--accent-glow);
+ }
+ .header-action-btn.blue-btn:hover{
+ background:rgba(143,180,255,0.24); border-color:rgba(143,180,255,0.65); color:#fff;
+ }
+
+ /* Guest List Styles */
+ .guest-summary-bar{
+ display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:12px; margin-bottom:16px;
+ }
+ .guest-stat-box{
+ background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius-sm);
+ padding:12px 14px; display:flex; flex-direction:column; gap:4px;
+ }
+ .guest-stat-lbl{font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; font-weight:600;}
+ .guest-stat-val{font-size:22px; font-weight:800; color:#fff;}
+ .guest-stat-val.success{color:var(--success);}
+ .guest-stat-val.warn{color:var(--warn);}
+ .guest-stat-sub{font-size:11px; color:var(--text-dim);}
+ 
+ .guest-checkin-btn{
+ padding:7px 15px; border-radius:100px; font-size:12px; font-weight:700; cursor:pointer;
+ border:1px solid rgba(143,180,255,0.35); background:rgba(143,180,255,0.09); color:var(--accent-glow);
+ display:inline-flex; align-items:center; gap:6px; transition:all 0.18s ease; white-space:nowrap;
+ }
+ .guest-checkin-btn:hover{
+ background:rgba(143,180,255,0.24); border-color:var(--accent); color:#fff; transform:translateY(-1px);
+ }
+ .guest-checkin-btn.checked{
+ border-color:rgba(127,224,168,0.5); background:rgba(127,224,168,0.16); color:var(--success);
+ box-shadow:0 0 14px rgba(127,224,168,0.22);
+ }
+ .guest-checkin-btn.checked:hover{
+ background:rgba(127,224,168,0.28); border-color:rgba(127,224,168,0.7);
+ }
+ .guest-checkin-btn small{font-size:10.5px; opacity:0.85; margin-left:3px;}
+ .guest-role-pill{
+ display:inline-flex; align-items:center; gap:4px; font-size:11px; padding:2px 8px; border-radius:6px;
+ background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:var(--text-dim);
+ }
+ .guest-role-pill.orderer{
+ background:rgba(143,180,255,0.12); border-color:rgba(143,180,255,0.3); color:var(--accent-glow); font-weight:600;
+ }
+ .guest-pay-now-btn{
+ padding:3px 9px; font-size:11px; font-weight:700; border:none; border-radius:6px;
+ background:linear-gradient(135deg, #ffd27f, #f59e0b); color:#0e1626; cursor:pointer;
+ margin-left:6px; transition:all 0.18s ease;
+ }
+ .guest-pay-now-btn:hover{filter:brightness(1.08); transform:scale(1.03);}
+
+ /* Cashier & Break Mode Styles */
+ .cashier-banner{
+ background:linear-gradient(135deg, rgba(255,210,127,0.12) 0%, rgba(245,158,11,0.06) 100%);
+ border:1px solid rgba(255,210,127,0.3); border-radius:var(--radius); padding:18px 22px;
+ margin-bottom:18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;
+ }
+ .cashier-banner-left{display:flex; align-items:center; gap:14px;}
+ .cashier-banner-icon{
+ width:46px; height:46px; border-radius:12px; background:rgba(255,210,127,0.18);
+ display:flex; align-items:center; justify-content:center; color:#ffd27f; flex-shrink:0;
+ }
+ .cashier-banner-icon svg{width:26px; height:26px;}
+ .cashier-banner-title{font-size:16.5px; font-weight:700; color:#fff;}
+ .cashier-banner-sub{font-size:13px; color:#ffd27f; margin-top:3px; font-weight:500;}
+ .cashier-search-hero{
+ margin-bottom:20px; position:relative;
+ }
+ .cashier-search-input{
+ width:100%; padding:18px 22px 18px 54px; font-size:16.5px; font-weight:600;
+ background:linear-gradient(180deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.04) 100%);
+ border:2px solid rgba(143,180,255,0.35); border-radius:var(--radius); color:#fff;
+ outline:none; transition:all 0.22s ease;
+ box-shadow:0 8px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+ }
+ .cashier-search-input:focus{
+ border-color:var(--accent); box-shadow:0 0 25px rgba(143,180,255,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+ }
+ .cashier-search-icon{
+ position:absolute; left:20px; top:50%; transform:translateY(-50%); width:22px; height:22px;
+ color:var(--accent-glow); pointer-events:none;
+ }
+ .cashier-cards-grid{
+ display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:14px; margin-bottom:24px;
+ }
+ .cashier-card{
+ background:linear-gradient(145deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%);
+ border:1px solid var(--glass-border); border-radius:var(--radius); padding:18px;
+ display:flex; flex-direction:column; justify-content:space-between; gap:14px;
+ transition:all 0.2s ease;
+ }
+ .cashier-card:hover{
+ border-color:rgba(255,210,127,0.4); transform:translateY(-2px);
+ box-shadow:0 12px 28px rgba(0,0,0,0.35);
+ }
+ .cashier-card.paid-card{
+ border-color:rgba(127,224,168,0.3); background:rgba(127,224,168,0.05);
+ }
+ .cashier-card-top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px;}
+ .cashier-card-name{font-size:16.5px; font-weight:700; color:#fff;}
+ .cashier-card-due{
+ font-size:22px; font-weight:800; color:#ffd27f; white-space:nowrap;
+ text-shadow:0 0 12px rgba(255,210,127,0.3);
+ }
+ .cashier-card-tickets{font-size:12px; color:var(--text-dim); line-height:1.5;}
+ .cashier-card-actions{display:flex; gap:8px; flex-wrap:wrap;}
+ .fast-pay-btn{
+ flex:1; min-width:140px; padding:12px 16px; border:none; border-radius:var(--radius-sm);
+ background:linear-gradient(135deg, #ffd27f 0%, #f59e0b 100%); color:#0e1626;
+ font-weight:800; font-size:13.5px; cursor:pointer; display:inline-flex; align-items:center;
+ justify-content:center; gap:6px; box-shadow:0 4px 14px rgba(245,158,11,0.35);
+ transition:all 0.18s ease;
+ }
+ .fast-pay-btn:hover{filter:brightness(1.08); transform:scale(1.02);}
+ .fast-pay-btn:active{transform:scale(0.98);}
+ .fast-change-btn{
+ padding:12px 14px; border:1px solid rgba(255,255,255,0.15); border-radius:var(--radius-sm);
+ background:rgba(255,255,255,0.06); color:var(--text); font-size:13px; font-weight:600;
+ cursor:pointer; transition:all 0.18s ease;
+ }
+ .fast-change-btn:hover{background:rgba(255,255,255,0.12); color:#fff;}
+
+ /* Kassensturz Modal Styles */
+ .kassensturz-modal{
+ max-width:760px; width:100%; max-height:90vh; overflow-y:auto;
+ background:linear-gradient(180deg, #101828 0%, #0a0f1d 100%);
+ border:1px solid rgba(255,210,127,0.35); border-radius:var(--radius); padding:26px;
+ box-shadow:0 24px 60px rgba(0,0,0,0.8), 0 0 35px rgba(255,210,127,0.15);
+ }
+ .kassensturz-hero-stat{
+ background:linear-gradient(135deg, rgba(255,210,127,0.15) 0%, rgba(245,158,11,0.08) 100%);
+ border:1px solid rgba(255,210,127,0.35); border-radius:var(--radius-sm); padding:20px 22px;
+ text-align:center; margin-bottom:18px;
+ }
+ .kassensturz-hero-amount{
+ font-size:42px; font-weight:800; color:#ffd27f; letter-spacing:-0.5px;
+ text-shadow:0 0 20px rgba(255,210,127,0.4); margin:6px 0;
+ }
+ .kassensturz-hero-breakdown{
+ font-size:14px; color:#eef2fb; font-weight:600;
+ }
+ .kassensturz-time-pills{
+ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;
+ }
+ .kassensturz-pill{
+ padding:8px 15px; border-radius:100px; font-size:12px; font-weight:600; cursor:pointer;
+ border:1px solid var(--glass-border); background:rgba(255,255,255,0.05); color:var(--text-dim);
+ transition:all 0.18s ease;
+ }
+ .kassensturz-pill:hover{background:rgba(255,255,255,0.1); color:#fff;}
+ .kassensturz-pill.active{
+ border-color:rgba(255,210,127,0.65); background:rgba(255,210,127,0.2); color:#ffd27f; font-weight:700;
+ }
+ .kassensturz-table{
+ width:100%; border-collapse:collapse; font-size:12.5px; margin-top:12px;
+ }
+ .kassensturz-table th{
+ text-align:left; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.12);
+ color:var(--text-dim); font-size:11px; text-transform:uppercase; font-weight:600;
+ }
+ .kassensturz-table td{
+ padding:10px 10px; border-bottom:1px solid rgba(255,255,255,0.05); color:var(--text);
+ }
+
+ /* Emergency Print Modal & Print Styles */
+ .emergency-print-modal{
+ max-width:960px; width:100%; max-height:92vh; overflow-y:auto;
+ background:linear-gradient(180deg, #101828 0%, #0a0f1d 100%);
+ border:1px solid rgba(143,180,255,0.35); border-radius:var(--radius); padding:26px;
+ box-shadow:0 24px 60px rgba(0,0,0,0.8);
+ }
+ .print-sheet-preview{
+ background:#ffffff; color:#111111; padding:28px 24px; border-radius:8px;
+ font-family:'Segoe UI', Arial, sans-serif; box-shadow:0 4px 20px rgba(0,0,0,0.4);
+ margin:18px 0; max-height:55vh; overflow-y:auto; border:1px solid #ddd;
+ }
+ .print-sheet-table{
+ width:100%; border-collapse:collapse; font-size:11.5px; color:#111;
+ }
+ .print-sheet-table th{
+ background:#f1f3f8; border:1px solid #ccc; padding:6px 8px; text-align:left; font-size:11px;
+ font-weight:700; text-transform:uppercase; letter-spacing:0.3px;
+ }
+ .print-sheet-table td{
+ border:1px solid #ccc; padding:6px 8px; vertical-align:middle;
+ }
+ .print-sheet-letter-row{
+ background:#e5e9f2; font-weight:800; font-size:13px; padding:6px 8px; text-align:center;
+ letter-spacing:2px; border:1px solid #bbb;
+ }
+ .print-checkbox-box{
+ display:inline-block; width:14px; height:14px; border:1.5px solid #222; border-radius:2px;
+ }
+
+ /* --- OFFIZIELLER DIN-A4 DRUCK VIA BROWSER / PDF --- */
+ @media print {
+ @page {
+ size: A4 portrait;
+ margin: 10mm 10mm 12mm 10mm;
+ }
+ body {
+ background:#ffffff !important; color:#000000 !important;
+ padding:0 !important; margin:0 !important;
+ }
+ /* Hide everything on the page except #printContainer */
+ body > * {
+ display:none !important;
+ }
+ #printContainer {
+ display:block !important; position:static !important;
+ width:100% !important; background:#ffffff !important; color:#000000 !important;
+ padding:0 !important; margin:0 !important;
+ }
+ #printContainer table {
+ width:100% !important; border-collapse:collapse !important; page-break-inside:auto;
+ }
+ #printContainer tr {
+ page-break-inside:avoid !important; page-break-after:auto;
+ }
+ #printContainer thead {
+ display:table-header-group !important;
+ }
+ #printContainer tfoot {
+ display:table-footer-group !important;
+ }
+ .no-print {
+ display:none !important;
+ }
+ }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+	<!-- Wartungsmodus Alert Banner für Admins -->
+	<div id="adminMaintenanceAlertBanner" style="display:none; background:linear-gradient(90deg, rgba(255,100,100,0.25), rgba(245,158,11,0.22)); border-bottom:1px solid rgba(255,170,127,0.45); padding:10px 16px; text-align:center; font-size:12.5px; font-weight:700; color:#ffd27f; position:sticky; top:0; z-index:9999; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);">
+		<span>⚠️ WARTUNGSMODUS IST AKTIV: Öffentliche Besucher sehen derzeit den Wartungshinweis und können keine Tickets buchen!</span>
+		<button type="button" onclick="window.quickDisableMaintenance()" style="margin-left:12px; background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:6px; padding:3px 12px; font-size:11.5px; font-weight:700; cursor:pointer; transition:all 0.2s ease;">
+			Jetzt beenden (Live schalten) 🚀
+		</button>
+	</div>
+
+
+<div class="login-card" id="loginCard">
+ <h1 style="margin-bottom:16px;">Admin Login</h1>
+ <input type="email" id="loginEmail" placeholder="E-Mail">
+ <input type="password" id="loginPass" placeholder="Passwort">
+ <button id="loginBtn">Anmelden</button>
+ <div class="login-error" id="loginError">Login fehlgeschlagen.</div>
+</div>
+
+<div class="wrap" id="dashboard" style="display:none;">
+ <div class="admin-header">
+ <div>
+ <div class="admin-title-row">
+ <h1>Winterball · Admin &amp; Einlass</h1>
+ <span class="live-pill" id="liveSyncStatus"><span class="pulse-dot"></span> Live Firestore</span>
+ <span class="live-pill" id="headerLiveVisitors" style="cursor:pointer; background:rgba(127,224,168,0.12); border-color:rgba(127,224,168,0.35); color:#7fe0a8;" title="Gerade online – Klicken für Insights">
+ <span class="pulse-dot" style="background:#7fe0a8; box-shadow:0 0 8px #7fe0a8;"></span>
+ <span id="headerLiveVisitorsText">0 online</span>
+ </span>
+ </div>
+ <div class="sub">30. Januar 2027 · 17:30 Uhr · Gymnasium Wilsdruff</div>
+ </div>
+ <div class="admin-header-actions">
+ <button type="button" id="headerPwaInstallBtn" class="header-action-btn" title="Winterball Admin als Handy-App installieren" style="background:linear-gradient(135deg, rgba(143,180,255,0.22), rgba(127,224,168,0.16)); border-color:rgba(143,180,255,0.45); color:#fff;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+ <span>App installieren</span>
+ </button>
+ <button type="button" id="headerKassensturzBtn" class="header-action-btn gold-btn" title="Kassensturz für die heutigen Pausen öffnen">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 6v12"/></svg>
+ <span>Kassensturz</span>
+ </button>
+ <button type="button" id="headerEmergencyPrintBtn" class="header-action-btn blue-btn" title="Druckfähige Notfall-Gästeliste (PDF)">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+ <span>Notfall-Liste</span>
+ </button>
+ <button type="button" id="headerRefreshBtn" class="header-action-btn" title="Ansicht neu synchronisieren">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+ <span>Aktualisieren</span>
+ </button>
+ <button type="button" id="logoutBtn" class="header-action-btn logout" title="Abmelden">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+ <span>Abmelden</span>
+ </button>
+ </div>
+ </div>
+
+ <!-- Mobile PWA Install Banner (Nur sichtbar im mobilen Browser wenn noch nicht installiert) -->
+ <div class="pwa-install-banner" id="mobilePwaBanner">
+ <div class="pwa-install-left">
+ <div class="pwa-install-icon">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px; height:20px; color:var(--accent);"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+ </div>
+ <div class="pwa-install-text">
+ <h4>Winterball Admin als App</h4>
+ <p>Schnellzugriff vom Startbildschirm im Vollbild</p>
+ </div>
+ </div>
+ <div style="display:flex; align-items:center; gap:8px;">
+ <button type="button" class="pwa-install-btn" id="pwaBannerInstallBtn">Installieren</button>
+ <button type="button" class="pwa-install-close" id="pwaBannerCloseBtn" aria-label="Schließen">✕</button>
+ </div>
+ </div>
+
+ <div class="stats" id="globalStatsBar">
+ <div class="stat">
+ <div class="stat-header">
+ <span class="stat-lbl">Bestellungen</span>
+ <div class="stat-icon-wrap">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+ </div>
+ </div>
+ <div class="num accent" id="statOrders">0</div>
+ <div class="stat-sub">Buchungen gesamt</div>
+ </div>
+ <div class="stat">
+ <div class="stat-header">
+ <span class="stat-lbl">Tickets gesamt</span>
+ <div class="stat-icon-wrap">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><line x1="13" y1="5" x2="13" y2="19" stroke-dasharray="2 2"/></svg>
+ </div>
+ </div>
+ <div class="num" id="statTickets">0</div>
+ <div class="stat-sub">Inkl. Begleitungen</div>
+ </div>
+ <div class="stat">
+ <div class="stat-header">
+ <span class="stat-lbl">Bezahlt</span>
+ <div class="stat-icon-wrap success">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+ </div>
+ </div>
+ <div class="num success" id="statPaid">0</div>
+ <div class="stat-sub" id="statPaidSub">0 noch unbezahlt</div>
+ </div>
+ <div class="stat">
+ <div class="stat-header">
+ <span class="stat-lbl">Eingecheckt</span>
+ <div class="stat-icon-wrap">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+ </div>
+ </div>
+ <div class="num" id="statCheckedIn">0</div>
+ <div class="stat-progress">
+ <div class="stat-progress-fill" id="checkinProgressFill"></div>
+ </div>
+ <div class="stat-sub" id="checkinProgressText">0% anwesend</div>
+ </div>
+ <div class="stat">
+ <div class="stat-header">
+ <span class="stat-lbl">Umsatz (bezahlt)</span>
+ <div class="stat-icon-wrap warn">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 6v12"/></svg>
+ </div>
+ </div>
+ <div class="num warn" id="statRevenue">0,00 €</div>
+ <div class="stat-sub">Bereits eingenommen</div>
+ </div>
+ <div class="stat">
+ <div class="stat-header">
+ <span class="stat-lbl">Vorauss. Umsatz</span>
+ <div class="stat-icon-wrap" style="background:rgba(127,224,168,0.18); color:#7fe0a8;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+ </div>
+ </div>
+ <div class="num" id="statProjectedRevenue" style="color:#7fe0a8;">0,00 €</div>
+ <div class="stat-sub">Alle Reservierungen</div>
+ </div>
+ <div class="stat">
+ <div class="stat-header">
+ <span class="stat-lbl">Altersgruppen</span>
+ <div class="stat-icon-wrap">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+ </div>
+ </div>
+ <div class="num" id="statU18Ratio">0 / 0</div>
+ <div class="stat-sub">U18 / Ü18 Gäste</div>
+ </div>
+ </div>
+
+ <div class="tabs">
+ <button class="tab-btn active" data-tab="orders">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+ <span>Bestellungen</span> <span class="tab-badge" id="tabOrdersCount">0</span>
+ </button>
+ <button class="tab-btn" data-tab="cashier">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="7" cy="15" r="1"/></svg>
+ <span> Kasse</span>
+ </button>
+ <button class="tab-btn" data-tab="guestlist">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+ <span> Gästeliste &amp; Einlass</span> <span class="tab-badge" id="tabGuestsCount">0</span>
+ </button>
+ <button class="tab-btn" data-tab="insights">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+ <span>Insights</span> <span class="tab-badge" id="tabLiveBadge" style="background:rgba(127,224,168,0.22); color:#7fe0a8; font-weight:700;">0 live</span>
+ </button>
+ <button class="tab-btn" data-tab="ratings">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14M12 6l2-2M12 6l-2-2M12 18l2 2M12 18l-2 2M6 12l-2 2M6 12l-2-2M18 12l2 2M18 12l2-2"/></svg>
+ <span>Bewertungen</span> <span class="tab-badge" id="tabRatingCount">0</span>
+ </button>
+ <button class="tab-btn" data-tab="settings">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+ <span>Einstellungen</span>
+ </button>
+ </div>
+
+ <!-- Tab: Kasse (Intuitive POS-Oberfläche) -->
+ <div class="tab-content" data-tab-content="cashier">
+ <div class="toolbar-container" style="margin-bottom:18px;">
+ <div class="toolbar-top">
+ <div class="search-box-wrap" style="flex:1;">
+ <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+ <input type="text" id="cashierSearch" placeholder="Gast, Begleitung, E-Mail, Klasse oder Ticket-Code suchen... (/ zum Fokussieren)" autocomplete="off">
+ <button type="button" id="cashierSearchClearBtn" class="search-clear-btn" style="display:none;" title="Suche leeren">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:12px; height:12px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+ </button>
+ </div>
+ <div class="toolbar-actions">
+ <button type="button" class="primary" id="cashierAddBtn" style="white-space:nowrap;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px; height:14px; flex-shrink:0;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+ <span>Neue Bestellung anlegen</span>
+ </button>
+ </div>
+ </div>
+ <div style="font-size:11.5px; color:var(--text-dim); margin-top:8px; display:flex; justify-content:space-between; padding:0 4px;">
+ <span>Tipp: Suche nach Nachname, Vorname, Ticket-Code oder Klasse (z.B. „10b“)</span>
+ <span id="cashierSearchCount" style="color:var(--accent-glow); font-weight:600;"></span>
+ </div>
+ </div>
+
+ <!-- Anlegeformular an der Kasse (eingeklappt standardmäßig) -->
+ <div class="add-form" id="addForm">
+ <div style="font-size:14px; font-weight:700; color:#fff; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+ <span> Neue Bestellung an der Kasse erfassen</span>
+ </div>
+ <div class="add-row">
+ <input type="text" id="addName" placeholder="Name des Bestellers (Vorname Nachname)">
+ <input type="number" id="addKlasse" placeholder="Klasse" min="5" max="12" style="max-width:90px;">
+ <button type="button" id="suggestEmailBtn" style="background:rgba(143,180,255,0.12); border:1px solid rgba(143,180,255,0.35); color:var(--accent-glow); border-radius:var(--radius-sm); padding:10px 14px; font-size:12px; cursor:pointer; white-space:nowrap;">LernSax-Adresse vorschlagen</button>
+ </div>
+ <div class="add-row">
+ <input type="email" id="addEmail" placeholder="E-Mail des Bestellers">
+ <select id="addCategory">
+ <option value="">Alter?</option>
+ <option value="u18">U18</option>
+ <option value="ue18">Ü18</option>
+ </select>
+ <select id="addSalutation" style="max-width:130px;">
+ <option value="du">Anrede: Du</option>
+ <option value="sie">Anrede: Sie</option>
+ </select>
+ </div>
+ <div class="companions-block" id="companionsBlock"></div>
+ <button type="button" id="addCompanionFieldBtn">+ Begleitung hinzufügen</button>
+ <div class="add-form-actions">
+ <button id="addSaveBtn">Anlegen</button>
+ <button id="addPayNowBtn" style="background:var(--success); color:#0a0e1a; font-weight:700;">Anlegen &amp; gleich bar kassieren</button>
+ <button id="addCancelBtn" class="secondary">Abbrechen</button>
+ </div>
+ </div>
+
+ <!-- Ausgangszustand: Keine Liste zu sehen! -->
+ <div class="cashier-empty-state" id="cashierEmptyState">
+ <div class="cashier-empty-icon">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>
+ </div>
+ <h3>Kasse bereit</h3>
+ <p>Tippe oben den Namen oder die Ticket-ID des Gastes ein, um die Kassenkarte zu öffnen,<br>oder klicke auf <strong>„+ Neue Bestellung anlegen“</strong>, um einen Vor-Ort-Kauf zu erfassen.</p>
+ </div>
+
+ <!-- Suchergebnisse: Dynamisch als POS-Karten -->
+ <div class="cashier-results-wrap" id="cashierResultsWrap" style="display:none;"></div>
+ </div>
+
+ <!-- Tab: Bestellungen (Reine Übersicht & Audit, ohne Neuanlage und ohne Schnellbezahlung) -->
+ <div class="tab-content active" data-tab-content="orders">
+ <div class="toolbar-container">
+ <div class="toolbar-top">
+ <div class="search-box-wrap">
+ <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+ <input type="text" id="search" placeholder="Name, E-Mail oder Ticket-ID suchen... (/ zum Fokussieren)" autocomplete="off">
+ <button type="button" id="searchClearBtn" class="search-clear-btn" style="display:none;" title="Suche leeren">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:12px; height:12px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+ </button>
+ </div>
+ <div class="toolbar-actions">
+ <button type="button" id="kassensturzToolbarBtn" style="border:1px solid rgba(255,210,127,0.4); background:rgba(255,210,127,0.12); color:#ffd27f; font-weight:700;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 6v12"/></svg>
+ <span>Kassensturz</span>
+ </button>
+ <button type="button" id="emergencyPrintToolbarBtn" style="border:1px solid rgba(143,180,255,0.4); background:rgba(143,180,255,0.12); color:var(--accent-glow); font-weight:600;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+ <span>Notfall-Liste (PDF)</span>
+ </button>
+ <button type="button" id="exportBtn">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+ <span>CSV Export</span>
+ </button>
+ </div>
+ </div>
+
+ <div class="filter-chips">
+ <button type="button" class="chip active" data-filter="all">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+ <span>Alle</span> <span class="chip-count" id="chipCountAll">0</span>
+ </button>
+ <button type="button" class="chip" data-filter="unpaid">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+ <span>Unbezahlt</span> <span class="chip-count" id="chipCountUnpaid">0</span>
+ </button>
+ <button type="button" class="chip" data-filter="paid">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+ <span>Bezahlt</span> <span class="chip-count" id="chipCountPaid">0</span>
+ </button>
+ <button type="button" class="chip" data-filter="checkedin">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+ <span>Eingecheckt</span> <span class="chip-count" id="chipCountCheckedIn">0</span>
+ </button>
+ <button type="button" class="chip" data-filter="notcheckedin">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+ <span>Noch offen</span> <span class="chip-count" id="chipCountNotCheckedIn">0</span>
+ </button>
+ <span class="results-badge" id="resultsBadge"></span>
+ </div>
+ </div>
+
+ <!-- Desktop Table View -->
+ <div class="table-wrap desktop-table-wrap">
+ <table>
+ <thead>
+ <tr><th>Besteller</th><th>Begleitungen</th><th>E-Mail</th><th>Tickets / Check-in</th><th>Bezahlt</th><th>Zeiten</th><th></th></tr>
+ </thead>
+ <tbody id="tableBody"></tbody>
+ </table>
+ </div>
+
+ <!-- Mobile Cards View -->
+ <div class="mobile-cards-wrap" id="mobileCardsWrap"></div>
+ </div>
+
+ <!-- Tab: Reine Gästeliste & Manueller 1-Klick-Check-in -->
+ <div class="tab-content" data-tab-content="guestlist">
+ <!-- Live Guestlist Stats Bar -->
+ <div class="guest-summary-bar">
+ <div class="guest-stat-box">
+ <span class="guest-stat-lbl">Gäste Gesamt</span>
+ <div class="guest-stat-val" id="gStatTotal">0</div>
+ <span class="guest-stat-sub">Alle Besteller + Begleitungen</span>
+ </div>
+ <div class="guest-stat-box">
+ <span class="guest-stat-lbl">Eingecheckt / Anwesend</span>
+ <div class="guest-stat-val success" id="gStatChecked">0</div>
+ <span class="guest-stat-sub" id="gStatCheckedPercent">0% der Gäste da</span>
+ </div>
+ <div class="guest-stat-box">
+ <span class="guest-stat-lbl">Noch erwartet</span>
+ <div class="guest-stat-val" id="gStatOpen">0</div>
+ <span class="guest-stat-sub">Ausstehender Einlass</span>
+ </div>
+ <div class="guest-stat-box">
+ <span class="guest-stat-lbl">Altersgruppen anwesend</span>
+ <div class="guest-stat-val" id="gStatAgeRatio">0 / 0</div>
+ <span class="guest-stat-sub">U18 da / Ü18 da</span>
+ </div>
+ <div class="guest-stat-box">
+ <span class="guest-stat-lbl">Zahlungsstatus</span>
+ <div class="guest-stat-val warn" id="gStatUnpaidCount">0</div>
+ <span class="guest-stat-sub">Tickets noch unbezahlt</span>
+ </div>
+ </div>
+
+ <!-- Toolbar for Guest List -->
+ <div class="toolbar-container">
+ <div class="toolbar-top">
+ <div class="search-box-wrap">
+ <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+ <input type="text" id="guestSearch" placeholder="Gast namentlich suchen (Name, Begleitung, Ticket-ID)..." autocomplete="off">
+ <button type="button" id="guestSearchClearBtn" class="search-clear-btn" style="display:none;" title="Suche leeren">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:12px; height:12px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+ </button>
+ </div>
+ <div class="toolbar-actions">
+ <button type="button" id="guestlistPrintBtn" class="blue-btn" style="border:1px solid rgba(143,180,255,0.4); background:rgba(143,180,255,0.12); color:var(--accent-glow); font-weight:700;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+ <span> Notfall-Gästeliste (Druck/PDF)</span>
+ </button>
+ </div>
+ </div>
+
+ <div class="filter-chips">
+ <button type="button" class="chip active" data-guest-filter="all">
+ <span>Alle Gäste</span> <span class="chip-count" id="chipGuestAll">0</span>
+ </button>
+ <button type="button" class="chip" data-guest-filter="open">
+ <span>Noch offen</span> <span class="chip-count" id="chipGuestOpen">0</span>
+ </button>
+ <button type="button" class="chip" data-guest-filter="checkedin">
+ <span>Eingecheckt</span> <span class="chip-count" id="chipGuestCheckedIn">0</span>
+ </button>
+ <button type="button" class="chip" data-guest-filter="u18">
+ <span>U18</span> <span class="chip-count" id="chipGuestU18">0</span>
+ </button>
+ <button type="button" class="chip" data-guest-filter="ue18">
+ <span>Ü18</span> <span class="chip-count" id="chipGuestUe18">0</span>
+ </button>
+ <button type="button" class="chip" data-guest-filter="unpaid">
+ <span> Unbezahlt</span> <span class="chip-count" id="chipGuestUnpaid">0</span>
+ </button>
+ <span class="results-badge" id="guestResultsBadge"></span>
+ </div>
+ </div>
+
+ <!-- Desktop Table View for Individual Guests -->
+ <div class="table-wrap desktop-table-wrap">
+ <table>
+ <thead>
+ <tr>
+ <th>Gast (Vor- &amp; Nachname)</th>
+ <th>Rolle / Bezug</th>
+ <th>Kategorie</th>
+ <th>Bezahlstatus</th>
+ <th>Ticket-Code</th>
+ <th>Einlass / 1-Klick-Check-in</th>
+ </tr>
+ </thead>
+ <tbody id="guestTableBody"></tbody>
+ </table>
+ </div>
+
+ <!-- Mobile Cards View for Individual Guests -->
+ <div class="mobile-cards-wrap" id="guestMobileCardsWrap"></div>
+ </div>
+
+ <!-- Tab: Insights (Kompaktes Widget-Dashboard auf einen Blick) -->
+ <div class="tab-content" data-tab-content="insights">
+ <!-- Top Bar mit Titel & Hinweis -->
+ <div class="insights-top-bar">
+ <div class="insights-top-title">
+ <span>Insights Dashboard</span>
+ <span class="hint-badge"> Klicke auf ein Widget für Details &amp; Vollbild</span>
+ </div>
+ <div style="font-size:12px; color:#9aa7c2; display:flex; align-items:center; gap:8px;">
+ <span class="pulse-dot" style="background:#7fe0a8; width:7px; height:7px;"></span>
+ <span id="insightsLiveTimestamp">Live aktualisiert</span>
+ </div>
+ </div>
+
+ <!-- Umsatz- & Spenden-Übersicht Banner -->
+ <div class="insights-revenue-banner" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:18px;">
+   <!-- Voraussichtlicher Umsatz -->
+   <div style="background:linear-gradient(135deg, rgba(143,180,255,0.12), rgba(143,180,255,0.03)); border:1px solid rgba(143,180,255,0.25); border-radius:14px; padding:14px 18px; backdrop-filter:blur(16px); display:flex; flex-direction:column; justify-content:space-between;">
+     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+       <span style="font-size:11.5px; font-weight:700; color:#8fb4ff; text-transform:uppercase; letter-spacing:0.5px;">Voraussichtlicher Umsatz</span>
+       <div style="width:28px; height:28px; border-radius:8px; background:rgba(143,180,255,0.2); display:flex; align-items:center; justify-content:center; color:#8fb4ff;">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px; height:15px;"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+       </div>
+     </div>
+     <div style="font-size:24px; font-weight:800; color:#fff; line-height:1.2;" id="insightsBannerProjectedRev">0,00 €</div>
+     <div style="font-size:11px; color:#9aa7c2; margin-top:4px;" id="insightsBannerProjectedSub">Tickets + Spenden hochgerechnet</div>
+   </div>
+
+   <!-- Tatsächlicher Umsatz -->
+   <div style="background:linear-gradient(135deg, rgba(127,224,168,0.12), rgba(127,224,168,0.03)); border:1px solid rgba(127,224,168,0.28); border-radius:14px; padding:14px 18px; backdrop-filter:blur(16px); display:flex; flex-direction:column; justify-content:space-between;">
+     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+       <span style="font-size:11.5px; font-weight:700; color:#7fe0a8; text-transform:uppercase; letter-spacing:0.5px;">Tatsächlicher Umsatz</span>
+       <div style="width:28px; height:28px; border-radius:8px; background:rgba(127,224,168,0.2); display:flex; align-items:center; justify-content:center; color:#7fe0a8;">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px; height:15px;"><polyline points="20 6 9 17 4 12"/></svg>
+       </div>
+     </div>
+     <div style="font-size:24px; font-weight:800; color:#7fe0a8; line-height:1.2;" id="insightsBannerActualRev">0,00 €</div>
+     <div style="font-size:11px; color:#9aa7c2; margin-top:4px;" id="insightsBannerActualSub">Am Ende wirklich bezahlt</div>
+   </div>
+
+   <!-- Davon Spenden -->
+   <div style="background:linear-gradient(135deg, rgba(255,210,127,0.12), rgba(255,210,127,0.03)); border:1px solid rgba(255,210,127,0.3); border-radius:14px; padding:14px 18px; backdrop-filter:blur(16px); display:flex; flex-direction:column; justify-content:space-between;">
+     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+       <span style="font-size:11.5px; font-weight:700; color:#ffd27f; text-transform:uppercase; letter-spacing:0.5px;">Davon Spenden</span>
+       <div style="width:28px; height:28px; border-radius:8px; background:rgba(255,210,127,0.2); display:flex; align-items:center; justify-content:center; color:#ffd27f;">
+         <svg viewBox="0 0 24 24" fill="currentColor" style="width:14px; height:14px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+       </div>
+     </div>
+     <div style="font-size:24px; font-weight:800; color:#ffd27f; line-height:1.2;" id="insightsBannerDonationRev">0,00 €</div>
+     <div style="font-size:11px; color:#9aa7c2; margin-top:4px;" id="insightsBannerDonationSub">Freiwillige Abikasse-Spenden</div>
+   </div>
+ </div>
+
+ <!-- 6 Interaktive Widget-Kacheln (3x2 Grid auf Laptop, kein Scrollen nötig) -->
+ <div class="insights-widget-grid">
+ <!-- 1. Widget: Live auf der Website -->
+ <div class="widget-card widget-card-live" data-widget="live" title="Klicken für Live-Besucher-Details">
+ <div class="widget-card-header">
+ <div class="widget-card-title">
+ <span class="pulse-dot" style="background:#7fe0a8; box-shadow:0 0 8px #7fe0a8;"></span>
+ <span>Live auf der Seite</span>
+ </div>
+ <span class="widget-expand-hint" title="Vergrößern">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+ </span>
+ </div>
+ <div>
+ <div style="display:flex; align-items:center; gap:10px;">
+ <div style="font-size:32px; font-weight:800; color:#7fe0a8; line-height:1;" id="widgetLiveCount">0</div>
+ <div>
+ <div style="font-size:13px; font-weight:700; color:#fff;" id="widgetLiveSub">0 online</div>
+ <div style="font-size:11px; color:#9aa7c2;">Echtzeit-Heartbeat</div>
+ </div>
+ </div>
+ <div id="widgetLiveMiniChips" style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; max-height:48px; overflow:hidden;">
+ <span style="font-size:11px; color:#9aa7c2; background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);">Warte auf Besucher...</span>
+ </div>
+ </div>
+ <div class="widget-card-footer">
+ <span>Sekundengenaue Erfassung</span>
+ <span class="zoom-text">Vergrößern </span>
+ </div>
+ </div>
+
+ <!-- 2. Widget: Website-Aufrufe im Zeitverlauf -->
+ <div class="widget-card" data-widget="views" title="Klicken für Tagesverlauf & Details">
+ <div class="widget-card-header">
+ <div class="widget-card-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+ <span>Website-Aufrufe</span>
+ </div>
+ <span class="widget-expand-hint" title="Vergrößern">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+ </span>
+ </div>
+ <div>
+ <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+ <div>
+ <span style="font-size:22px; font-weight:800; color:#fff;" id="widgetViewsToday">0</span>
+ <span style="font-size:11px; color:#9aa7c2;"> heute</span>
+ </div>
+ <div style="font-size:11px; color:#8fb4ff; font-weight:600;">
+ <span id="widgetViewsTotal">0</span> gesamt
+ </div>
+ </div>
+ <div style="height:92px; width:100%; position:relative;">
+ <canvas id="chartViewsDaily"></canvas>
+ </div>
+ </div>
+ <div class="widget-card-footer">
+ <span>Tageskurve der Aufrufe</span>
+ <span class="zoom-text">Vergrößern </span>
+ </div>
+ </div>
+
+ <!-- 3. Widget: Gerätetypen (Smartphone vs PC vs Tablet) -->
+ <div class="widget-card" data-widget="device" title="Klicken für Geräteaufschlüsselung">
+ <div class="widget-card-header">
+ <div class="widget-card-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+ <span>Gerätetypen</span>
+ </div>
+ <span class="widget-expand-hint" title="Vergrößern">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+ </span>
+ </div>
+ <div style="display:flex; align-items:center; gap:12px; height:100px;">
+ <div style="width:90px; height:90px; flex-shrink:0; position:relative;">
+ <canvas id="chartDevice"></canvas>
+ </div>
+ <div style="flex:1; min-width:0;">
+ <div style="font-size:20px; font-weight:800; color:#7fe0a8;" id="widgetMobilePct">0%</div>
+ <div style="font-size:12px; font-weight:600; color:#fff;">Smartphones</div>
+ <div style="font-size:11px; color:#9aa7c2; margin-top:2px;" id="widgetDeviceBreakdown">0 Mobil · 0 PC</div>
+ </div>
+ </div>
+ <div class="widget-card-footer">
+ <span>Mobil vs. Desktop vs. Tablet</span>
+ <span class="zoom-text">Vergrößern </span>
+ </div>
+ </div>
+
+ <!-- 4. Widget: Betriebssysteme & Plattformen -->
+ <div class="widget-card" data-widget="os" title="Klicken für Betriebssystem-Details">
+ <div class="widget-card-header">
+ <div class="widget-card-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+ <span>Betriebssysteme</span>
+ </div>
+ <span class="widget-expand-hint" title="Vergrößern">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+ </span>
+ </div>
+ <div style="display:flex; align-items:center; gap:12px; height:100px;">
+ <div style="width:90px; height:90px; flex-shrink:0; position:relative;">
+ <canvas id="chartOS"></canvas>
+ </div>
+ <div style="flex:1; min-width:0;">
+ <div style="font-size:18px; font-weight:800; color:#c7d7f7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" id="widgetTopOS">–</div>
+ <div style="font-size:12px; font-weight:600; color:#fff;">Häufigste Plattform</div>
+ <div style="font-size:11px; color:#9aa7c2; margin-top:2px;" id="widgetOSCount">0 Systeme erkannt</div>
+ </div>
+ </div>
+ <div class="widget-card-footer">
+ <span>iOS, Android, Windows &amp; Co.</span>
+ <span class="zoom-text">Vergrößern </span>
+ </div>
+ </div>
+
+ <!-- 5. Widget: Ticket-Bestellungen -->
+ <div class="widget-card" data-widget="orders" title="Klicken für Buchungsanalyse">
+ <div class="widget-card-header">
+ <div class="widget-card-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+ <span>Ticket-Buchungen</span>
+ </div>
+ <span class="widget-expand-hint" title="Vergrößern">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+ </span>
+ </div>
+ <div>
+ <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+ <div>
+ <span style="font-size:22px; font-weight:800; color:#ffd27f;" id="widgetOrdersCount">0</span>
+ <span style="font-size:11px; color:#9aa7c2;"> Buchungen</span>
+ </div>
+ <div style="font-size:11px; color:#ffd27f; font-weight:600;">
+ <span id="widgetTicketsCount">0</span> Tickets
+ </div>
+ </div>
+ <div style="height:92px; width:100%; position:relative;">
+ <canvas id="chartDaily"></canvas>
+ </div>
+ </div>
+ <div class="widget-card-footer">
+ <span>Verkaufskurve pro Tag</span>
+ <span class="zoom-text">Vergrößern </span>
+ </div>
+ </div>
+
+ <!-- 6. Widget: Gäste-Demografie & Finanzen -->
+ <div class="widget-card" data-widget="demographics" title="Klicken für Demografie & Kasse">
+ <div class="widget-card-header">
+ <div class="widget-card-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+ <span>Gäste &amp; Finanzen</span>
+ </div>
+ <span class="widget-expand-hint" title="Vergrößern">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+ </span>
+ </div>
+ <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; height:100px;">
+ <div style="display:flex; flex-direction:column; align-items:center; flex:1;">
+ <div style="width:70px; height:70px; position:relative;">
+ <canvas id="chartCategory"></canvas>
+ </div>
+ <div style="font-size:11px; color:#8fb4ff; font-weight:700; margin-top:2px;" id="widgetCatRatio">0 U18 / 0 Ü18</div>
+ </div>
+ <div style="width:1px; height:60px; background:rgba(255,255,255,0.08);"></div>
+ <div style="display:flex; flex-direction:column; align-items:center; flex:1;">
+ <div style="width:70px; height:70px; position:relative;">
+ <canvas id="chartPaid"></canvas>
+ </div>
+ <div style="font-size:11px; color:#7fe0a8; font-weight:700; margin-top:2px;" id="widgetPaidRatio">0 bezahlt</div>
+ </div>
+ </div>
+ <div class="widget-card-footer">
+ <span>U18 vs. Ü18 &amp; Bezahlquote</span>
+ <span class="zoom-text">Vergrößern </span>
+ </div>
+ </div>
+
+ <!-- 7. Widget: Conversion-Funnel & Absprung-Analyse -->
+		<div class="widget-card" data-widget="funnel" title="Klicken für detaillierte Funnel- &amp; Absprung-Analyse">
+			<div class="widget-card-header">
+				<div class="widget-card-title">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+					<span>Conversion-Funnel</span>
+				</div>
+				<span class="widget-expand-hint" title="Vergrößern">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+				</span>
+			</div>
+			<div>
+				<!-- Widget Mini Mode Switcher -->
+				<div style="display:flex; background:rgba(255,255,255,0.06); padding:2px; border-radius:6px; margin-bottom:8px; gap:2px;" onclick="event.stopPropagation();">
+					<button type="button" class="funnel-w-tab" id="fwTabForm" onclick="window.switchFunnelWidgetMode('form', event)" style="flex:1; border:none; background:rgba(143,180,255,0.22); color:#8fb4ff; border-radius:4px; padding:3px 4px; font-size:9.5px; font-weight:700; cursor:pointer;">Formular</button>
+					<button type="button" class="funnel-w-tab" id="fwTabLife" onclick="window.switchFunnelWidgetMode('lifecycle', event)" style="flex:1; border:none; background:transparent; color:#9aa7c2; border-radius:4px; padding:3px 4px; font-size:9.5px; font-weight:600; cursor:pointer;">Kasse &amp; Einlass</button>
+					<button type="button" class="funnel-w-tab" id="fwTabE2e" onclick="window.switchFunnelWidgetMode('e2e', event)" style="flex:1; border:none; background:transparent; color:#9aa7c2; border-radius:4px; padding:3px 4px; font-size:9.5px; font-weight:600; cursor:pointer;">End-to-End</button>
+				</div>
+				<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+					<div>
+						<span style="font-size:22px; font-weight:800; color:#7fe0a8;" id="widgetFunnelRate">0%</span>
+						<span style="font-size:11px; color:#9aa7c2;" id="widgetFunnelRateLabel"> Conversion-Rate</span>
+					</div>
+					<div style="font-size:11px; color:#8fb4ff; font-weight:600;" id="widgetFunnelDropoff">
+						0% Gesamt-Absprung
+					</div>
+				</div>
+				<div style="display:flex; flex-direction:column; gap:4.5px; margin-top:6px; min-height:86px;" id="widgetFunnelMiniBars">
+					<!-- Dynamisch gerendert je nach Modus -->
+				</div>
+				<div id="widgetFunnelBottleneck" style="margin-top:6px; font-size:10px; color:#ff8080; font-weight:600; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">
+					Größter Absprung: Berechne...
+				</div>
+			</div>
+			<div class="widget-card-footer">
+				<span>Trichter-, Kassen- &amp; Mobil-Analyse</span>
+				<span class="zoom-text">Vergrößern </span>
+			</div>
+		</div>
+
+		<!-- 8. Widget: Umsatz- & Ticket-Prognose (Kapazitätsauslastung) -->
+ <div class="widget-card" data-widget="forecast" title="Klicken für Kapazitäts- &amp; Umsatz-Hochrechnung">
+ <div class="widget-card-header">
+ <div class="widget-card-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+ <span>Kapazität &amp; Prognose</span>
+ </div>
+ <span class="widget-expand-hint" title="Vergrößern">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+ </span>
+ </div>
+ <div>
+ <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+ <div style="display:flex; align-items:baseline; gap:5px; flex-wrap:wrap;">
+ <span style="font-size:22px; font-weight:800; color:#8fb4ff;" id="widgetForecastTickets">0</span>
+ <span style="font-size:12px; color:#9aa7c2;" id="widgetForecastCap">/ 250 Plätze</span>
+ <button type="button" id="btnQuickEditCap" style="background:rgba(143,180,255,0.15); border:1px solid rgba(143,180,255,0.3); border-radius:5px; color:#8fb4ff; font-size:10px; padding:2px 7px; cursor:pointer;" title="Saal-Kapazität ändern">Ändern</button>
+ </div>
+ <div style="font-size:12px; font-weight:700; color:#7fe0a8;" id="widgetForecastPct">
+ 0%
+ </div>
+ </div>
+ <div style="height:10px; background:rgba(255,255,255,0.06); border-radius:5px; overflow:hidden; margin:8px 0;">
+ <div id="widgetForecastBar" style="height:100%; width:0%; background:linear-gradient(90deg, #8fb4ff 0%, #7fe0a8 100%); border-radius:5px; transition:width 0.4s ease;"></div>
+ </div>
+ <div style="display:flex; justify-content:space-between; font-size:11px; color:#9aa7c2; margin-top:6px;">
+ <span>Frei: <strong style="color:#fff;" id="widgetForecastRemaining">250</strong></span>
+ <span>Tempo: <strong style="color:#ffd27f;" id="widgetForecastPace">Berechne...</strong></span>
+ </div>
+ <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08); display:flex; flex-direction:column; gap:3px; font-size:11px;">
+   <div style="display:flex; justify-content:space-between; align-items:center;">
+     <span style="color:#9aa7c2;">Vorauss. Umsatz:</span>
+     <strong style="color:#8fb4ff;" id="widgetForecastProjRev">0,00 €</strong>
+   </div>
+   <div style="display:flex; justify-content:space-between; align-items:center;">
+     <span style="color:#9aa7c2;">Echter Umsatz (bezahlt):</span>
+     <strong style="color:#7fe0a8;" id="widgetForecastActRev">0,00 €</strong>
+   </div>
+   <div style="display:flex; justify-content:space-between; align-items:center;">
+     <span style="color:#9aa7c2;">Davon Spenden:</span>
+     <strong style="color:#ffd27f;" id="widgetForecastDonRev">0,00 €</strong>
+   </div>
+ </div>
+ </div>
+ <div class="widget-card-footer">
+ <span>Hochrechnung &amp; Kapazität einstellen</span>
+ <span class="zoom-text">Vergrößern </span>
+ </div>
+ </div>
+
+ <!-- 9. Widget: Tages- & Stunden-Aktivität (Peak Times) -->
+ <div class="widget-card" data-widget="peaktimes" title="Klicken für Aktivitäts-Heatmap &amp; beste Posting-Zeiten">
+ <div class="widget-card-header">
+ <div class="widget-card-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+ <span>Peak Times &amp; Aktivität</span>
+ </div>
+ <span class="widget-expand-hint" title="Vergrößern">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+ </span>
+ </div>
+ <div>
+ <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+ <div>
+ <span style="font-size:16px; font-weight:800; color:#ffd27f;" id="widgetPeakHour">–</span>
+ <div style="font-size:10.5px; color:#9aa7c2;">Stärkste Zeit</div>
+ </div>
+ <div style="text-align:right;">
+ <span style="font-size:15px; font-weight:700; color:#8fb4ff;" id="widgetPeakDay">–</span>
+ <div style="font-size:10.5px; color:#9aa7c2;">Stärkster Tag</div>
+ </div>
+ </div>
+
+ <!-- Vorschau-Leiste für Wochentage (Mo-So) -->
+ <div style="margin-top:6px; background:rgba(0,0,0,0.22); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:6px 8px;">
+ <div style="display:flex; justify-content:space-between; align-items:flex-end; height:36px; gap:4px;" id="widgetPeakDayBars">
+ <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;"><div style="width:100%; height:30%; background:rgba(143,180,255,0.3); border-radius:2px;"></div></div>
+ <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;"><div style="width:100%; height:45%; background:rgba(143,180,255,0.3); border-radius:2px;"></div></div>
+ <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;"><div style="width:100%; height:25%; background:rgba(143,180,255,0.3); border-radius:2px;"></div></div>
+ <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;"><div style="width:100%; height:40%; background:rgba(143,180,255,0.3); border-radius:2px;"></div></div>
+ <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;"><div style="width:100%; height:60%; background:rgba(143,180,255,0.4); border-radius:2px;"></div></div>
+ <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;"><div style="width:100%; height:75%; background:rgba(143,180,255,0.5); border-radius:2px;"></div></div>
+ <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;"><div style="width:100%; height:95%; background:#ffd27f; border-radius:2px;"></div></div>
+ </div>
+ <div style="display:flex; justify-content:space-between; margin-top:3px; font-size:9px; color:#9aa7c2; font-weight:600;">
+ <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span>
+ </div>
+ </div>
+
+ <!-- Vorschau Tageszeiten-Balken (Vormittag, Nachmittag, Abend, Nacht) -->
+ <div style="margin-top:6px;">
+ <div style="display:flex; gap:3px; height:6px; border-radius:3px; overflow:hidden;" id="widgetPeakSlotsStrip">
+ <div style="width:20%; background:rgba(143,180,255,0.4);" title="Vormittag (6-12h)"></div>
+ <div style="width:30%; background:rgba(143,180,255,0.6);" title="Nachmittag (12-18h)"></div>
+ <div style="width:40%; background:#ffd27f;" title="Abend (18-24h)"></div>
+ <div style="width:10%; background:rgba(143,180,255,0.2);" title="Nacht (0-6h)"></div>
+ </div>
+ <div style="display:flex; justify-content:space-between; font-size:9px; color:#9aa7c2; margin-top:2px;">
+ <span>Vormittag</span><span>Nachmittag</span><span style="color:#ffd27f; font-weight:700;">Abend (Peak)</span><span>Nacht</span>
+ </div>
+ </div>
+ </div>
+ <div class="widget-card-footer">
+ <span>Heatmap &amp; Posting-Zeiten</span>
+ <span class="zoom-text">Vergrößern </span>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- Reusable Magnified Widget Modal -->
+ <div class="widget-modal-backdrop" id="widgetModal">
+ <div class="widget-modal-dialog">
+ <div class="widget-modal-header">
+ <div class="widget-modal-header-left">
+ <div class="widget-modal-icon" id="modalWidgetIcon">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+ </div>
+ <div>
+ <div class="widget-modal-title" id="modalWidgetTitle">Widget Details</div>
+ <div class="widget-modal-subtitle" id="modalWidgetSubtitle">Ausführliche Auswertung</div>
+ </div>
+ </div>
+ <button type="button" class="widget-modal-close-btn" id="modalWidgetCloseBtn" title="Schließen (Esc)">
+ <span>Schließen</span>
+ <kbd style="background:rgba(255,255,255,0.12); padding:1px 5px; border-radius:4px; font-size:10px;">Esc</kbd>
+ <svg style="width:14px; height:14px; margin-left:2px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+ </button>
+ </div>
+ <div class="widget-modal-body">
+ <!-- Top KPIs -->
+ <div class="widget-modal-kpis" id="modalKpiRow"></div>
+
+ <!-- Chart Box -->
+ <div class="widget-modal-chart-box" id="modalChartBox" style="display:none;">
+ <canvas id="modalChartCanvas"></canvas>
+ </div>
+
+ <!-- Live Box (for live presence) -->
+ <div id="modalLiveBox" style="display:none;"></div>
+
+ <!-- Demographics Box (for dual charts in modal) -->
+ <div id="modalDemographicsBox" style="display:none;"></div>
+
+ <!-- Detail Table Box -->
+ <div class="widget-modal-table-box" id="modalDetailBox" style="display:none;"></div>
+ </div>
+ </div>
+ </div>
+
+ <!-- Tab: Bewertungen -->
+ <div class="tab-content" data-tab-content="ratings">
+ <div class="stats" style="margin-bottom:24px;">
+ <div class="stat">
+ <div class="stat-header">
+ <span class="stat-lbl">Durchschnittsbewertung</span>
+ <div class="stat-icon-wrap">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14M12 6l2-2M12 6l-2-2M12 18l2 2M12 18l-2 2M6 12l-2 2M6 12l-2-2M18 12l2 2M18 12l2-2"/></svg>
+ </div>
+ </div>
+ <div class="num accent" id="statRatingAvg">–</div>
+ <div class="stat-sub">Ø von 5 Sternen</div>
+ </div>
+ <div class="stat">
+ <div class="stat-header">
+ <span class="stat-lbl">Feedback gesamt</span>
+ <div class="stat-icon-wrap">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+ </div>
+ </div>
+ <div class="num" id="statRatingCount">0</div>
+ <div class="stat-sub">Eingereichte Rezensionen</div>
+ </div>
+ </div>
+ <div class="insights-grid" style="margin-bottom:24px;">
+ <div class="insight-card wide">
+ <div class="insight-title">Bewertungs-Verteilung</div>
+ <canvas id="chartRatings"></canvas>
+ </div>
+ </div>
+ <div class="table-wrap" style="padding:16px;">
+ <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+ <div style="font-size:13px; color:var(--text-dim); font-weight:600;">Kommentare &amp; Feedback</div>
+ <button id="resetAllRatingsBtn" class="danger-btn" style="padding:8px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+ <span>Alle Bewertungen zurücksetzen</span>
+ </button>
+ </div>
+ <div id="ratingsCommentList" style="display:flex; flex-direction:column; gap:10px;"></div>
+ </div>
+ </div>
+
+
+
+ <!-- Tab: Einstellungen -->
+ <div class="tab-content" data-tab-content="settings">
+ <div class="settings-section">
+ <div class="settings-section-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-title-svg"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 6v12"/></svg>
+ <span>Preise</span>
+ </div>
+ <div class="price-bar">
+ <label for="priceU18Input">Preis U18 (€)</label>
+ <input type="number" id="priceU18Input" min="0" step="0.5" placeholder="z.B. 10">
+ <label for="priceUe18Input">Preis Ü18 (€)</label>
+ <input type="number" id="priceUe18Input" min="0" step="0.5" placeholder="z.B. 15">
+ <button id="priceSaveBtn">Speichern</button>
+ <span class="price-saved" id="priceSaved">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><polyline points="20 6 9 17 4 12"/></svg>
+ <span>Gespeichert</span>
+ </span>
+ </div>
+ </div>
+
+ <div class="settings-section">
+ <div class="settings-section-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-title-svg"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+ <span>Anmeldezeitraum &amp; Kapazität</span>
+ </div>
+
+ <div class="info-editor">
+ <label for="opensAtInput">Anmeldebeginn (davor läuft ein Countdown, Formular gesperrt)</label>
+ <input type="datetime-local" id="opensAtInput" style="max-width:240px;">
+ <div class="info-editor-actions">
+ <button id="opensAtSaveBtn">Speichern</button>
+ <button id="opensAtClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Sofort geöffnet</button>
+ <span class="price-saved" id="opensAtSaved">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><polyline points="20 6 9 17 4 12"/></svg>
+ <span>Gespeichert</span>
+ </span>
+ </div>
+ </div>
+
+ <div class="info-editor">
+ <label for="deadlineInput">Anmeldeschluss (danach ist das Formular gesperrt)</label>
+ <input type="datetime-local" id="deadlineInput" style="max-width:240px;">
+ <div class="info-editor-actions">
+ <button id="deadlineSaveBtn">Speichern</button>
+ <button id="deadlineClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Kein Anmeldeschluss</button>
+ <span class="price-saved" id="deadlineSaved">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><polyline points="20 6 9 17 4 12"/></svg>
+ <span>Gespeichert</span>
+ </span>
+ </div>
+ </div>
+
+ <div class="info-editor">
+ <label for="maxTicketsInput">Maximale Teilnehmerzahl (leer lassen = kein Limit). Sobald erreicht, sperrt sich die Anmeldeseite automatisch.</label>
+ <input type="number" id="maxTicketsInput" min="1" style="max-width:120px;" placeholder="z.B. 200">
+ <div class="info-editor-actions">
+ <button id="maxTicketsSaveBtn">Speichern</button>
+ <button id="maxTicketsClearBtn" style="background:rgba(255,255,255,0.05); color:var(--text); border:1px solid var(--glass-border);">Kein Limit</button>
+ <span class="price-saved" id="maxTicketsSaved">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><polyline points="20 6 9 17 4 12"/></svg>
+ <span>Gespeichert</span>
+ </span>
+ </div>
+ </div>
+ </div>
+
+ <div class="settings-section">
+ <div class="settings-section-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-title-svg"><path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0"/></svg>
+ <span>Infos für Gäste &amp; Mailversand</span>
+ </div>
+
+ <div class="info-editor">
+ <label for="infoText">Wichtige Infos auf der Anmeldeseite (optional, erscheint dort für alle Gäste)</label>
+ <textarea id="infoText" placeholder="z.B. Dresscode: Elegant. Einlass ab 17:00 Uhr. Fragen an ..."></textarea>
+ <div class="info-editor-actions">
+ <button id="infoSaveBtn">Speichern</button>
+ <span class="price-saved" id="infoSaved">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><polyline points="20 6 9 17 4 12"/></svg>
+ <span>Gespeichert</span>
+ </span>
+ </div>
+ </div>
+
+ <div class="info-editor">
+ <label for="lernsaxThresholdInput">LernSax-Versand: Bis einschließlich zu dieser Klassenstufe über deine eigene LernSax-Adresse verschicken (z.B. 7 = Klassen 5, 6 und 7 über LernSax; ab Klasse 8 normal über Brevo).</label>
+ <input type="number" id="lernsaxThresholdInput" min="1" max="13" style="max-width:120px;" placeholder="z.B. 7">
+ <div style="font-size:11.5px; color:var(--text-dim); margin-top:4px;">Schüler bis einschließlich dieser Klasse können meist keine weltweiten E-Mails empfangen. Mails an sie gehen automatisch von deiner LernSax-Adresse raus.</div>
+ <div class="info-editor-actions">
+ <button id="lernsaxThresholdSaveBtn">Speichern</button>
+ <span class="price-saved" id="lernsaxThresholdSaved">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><polyline points="20 6 9 17 4 12"/></svg>
+ <span>Gespeichert</span>
+ </span>
+ </div>
+ </div>
+ </div>
+
+ <div class="settings-section" style="border:1px solid rgba(255,170,127,0.28); background:rgba(255,170,127,0.03);">
+				<div class="settings-section-title" style="color:#ffd27f;">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-title-svg" style="color:#ffd27f;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+					<span>Wartungsmodus (Website &amp; Anmeldung pausieren)</span>
+				</div>
+				<div class="info-editor">
+					<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+						<div style="flex:1; min-width:240px;">
+							<div style="font-weight:700; color:#fff; font-size:14px;">Wartungsarbeiten-Sperre für Besucher</div>
+							<div style="font-size:12px; color:var(--text-dim); margin-top:3px; line-height:1.45;">
+								Wenn aktiviert, sehen reguläre Gäste auf der Start- und Anmeldeseite einen edlen Wartungsbildschirm. Buchungen sind währenddessen pausiert. Der Admin-Bereich bleibt für euch jederzeit voll erreichbar.
+							</div>
+						</div>
+						<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+							<span id="maintenanceStatusBadge" style="padding:5px 12px; border-radius:100px; font-size:11.5px; font-weight:700; background:rgba(127,224,168,0.15); color:#7fe0a8; border:1px solid rgba(127,224,168,0.3);">
+								● Website ist LIVE (Wartung AUS)
+							</span>
+							<button type="button" id="maintenanceToggleBtn" style="padding:8px 16px; border-radius:8px; font-weight:700; font-size:12.5px; cursor:pointer; transition:all 0.2s ease; background:rgba(255,170,127,0.2); color:#ffd27f; border:1px solid rgba(255,170,127,0.4);">
+								Wartungsmodus aktivieren
+							</button>
+						</div>
+					</div>
+
+					<label for="maintenanceMessageInput" style="margin-top:10px;">Individuelle Meldung für Besucher (optional)</label>
+					<textarea id="maintenanceMessageInput" placeholder="z.B. Wir führen gerade planmäßige Wartungsarbeiten durch. In Kürze ist die Anmeldung wieder erreichbar!" style="min-height:68px;"></textarea>
+
+					<div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; flex-wrap:wrap; gap:10px;">
+						<div style="font-size:11.5px; color:#c7d7f7;" id="maintenanceLastUpdated">Zuletzt aktualisiert: —</div>
+						<div class="info-editor-actions">
+							<button id="maintenanceMessageSaveBtn">Nachricht speichern</button>
+							<span class="price-saved" id="maintenanceSaved">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><polyline points="20 6 9 17 4 12"/></svg>
+								<span>Gespeichert</span>
+							</span>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="settings-section">
+ <div class="settings-section-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-title-svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+ <span>Ablaufplan des Abends</span>
+ </div>
+ <div class="info-editor">
+ <label>Erscheint als Zeitstrahl "Ablauf" auf der Winterball-Seite. Zum Sortieren an ⠿ ziehen.</label>
+ <div class="schedule-list" id="scheduleList"></div>
+ <button type="button" id="scheduleAddBtn">+ Programmpunkt hinzufügen</button>
+ <div class="info-editor-actions">
+ <button id="scheduleSaveBtn">Speichern</button>
+ <span class="price-saved" id="scheduleSaved">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><polyline points="20 6 9 17 4 12"/></svg>
+ <span>Gespeichert</span>
+ </span>
+ </div>
+ </div>
+ </div>
+
+ <div class="settings-section">
+ <div class="settings-section-title">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-title-svg"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+ <span>Datenschutz &amp; Löschung</span>
+ </div>
+ <div class="info-editor">
+ <label>Ihr speichert Name, E-Mail, Altersgruppe (U18/Ü18) und Ticket-ID von
+ Schüler:innen. Das sind personenbezogene Daten Minderjähriger. Bitte nach der Veranstaltung
+ zeitnah löschen (empfohlen: spätestens 30 Tage danach, sofern keine Buchhaltungspflicht
+ entgegensteht). Die <a href="datenschutz.html" target="_blank" style="color:var(--accent);">Datenschutzerklärung</a>
+ ist auf der Anmeldeseite verlinkt und muss vor jeder Anmeldung bestätigt werden.
+ </label>
+ <div class="info-editor-actions">
+ <button type="button" id="deleteAllDataBtn" class="danger-btn" style="display:inline-flex; align-items:center; gap:8px;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+ <span>Alle Bestellungs- und Ticketdaten jetzt endgültig löschen</span>
+ </button>
+ </div>
+ </div>
+ </div>
+ </div>
+</div>
+
+<!-- Kassen-Popup: Betrag eingeben, Rückgeld wird automatisch berechnet -->
+<div class="modal-overlay" id="cashModalOverlay">
+		<div class="cash-modal">
+			<button type="button" class="cash-modal-close-btn" id="cashModalCloseX" title="Schließen (Esc)">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+			</button>
+
+			<div class="cash-modal-grid">
+				<!-- Linke Spalte: Übersicht, Bon & Beträge -->
+				<div class="cash-col-summary">
+					<div>
+						<div class="cash-summary-header">
+							<div class="cash-pos-tag">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="7" cy="15" r="1"/></svg>
+								<span>VORVERKAUFSKASSE · BARZAHLUNG</span>
+							</div>
+							<div class="cash-modal-name" id="cashModalName"></div>
+							<div id="cashModalSubtitle"></div>
+						</div>
+
+						<div class="cash-display-card" style="margin-top:12px;">
+							<div class="cash-row">
+								<span class="cash-row-label">Fälliger Betrag</span>
+								<strong class="cash-row-val" id="cashDue">0,00 €</strong>
+							</div>
+							<div class="cash-row cash-row-given">
+								<span class="cash-row-label">
+									<span class="pulse-dot" style="background:var(--accent); width:8px; height:8px; display:inline-block; margin-right:6px; border-radius:50%;"></span>
+									Gegeben (Bar)
+								</span>
+								<strong class="cash-row-val highlight" id="cashGiven">0,00 €</strong>
+							</div>
+							<div class="cash-row cash-donation" id="cashDonationRow" style="display:none;">
+								<span class="cash-row-label donation-lbl">
+									<svg viewBox="0 0 24 24" fill="currentColor" style="width:15px; height:15px; color:#ffd27f; display:inline-block; vertical-align:middle; margin-right:4px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+									<span>Freiwillige Spende</span>
+								</span>
+								<strong class="cash-row-val donation-val" id="cashDonation">0,00 €</strong>
+							</div>
+							<div class="cash-row cash-change" id="cashChangeRow">
+								<span class="cash-row-label">Rückgeld</span>
+								<strong class="cash-row-val change-val" id="cashChange">0,00 €</strong>
+							</div>
+						</div>
+
+						<!-- Schnellbutton: Restgeld als Spende behalten -->
+						<div id="cashDonateQuickWrap" style="display:none; margin-top:12px;">
+							<button type="button" class="donate-change-btn" id="cashDonateChangeBtn" title="Restgeld direkt als Spende für Jahrgang 12 übernehmen (Taste S)">
+								<svg viewBox="0 0 24 24" fill="currentColor" style="width:16px; height:16px; flex-shrink:0;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+								<span id="cashDonateChangeBtnText">Restgeld als Spende behalten (+3,00 €)</span>
+							</button>
+						</div>
+					</div>
+
+					<div class="cash-modal-actions">
+						<button type="button" class="secondary" id="cashCancelBtn">Abbrechen (Esc)</button>
+						<button type="button" id="cashConfirmBtn" disabled>Bezahlt</button>
+					</div>
+				</div>
+
+				<!-- Rechte Spalte: Großes Übersichtlich Strukturiertes POS-Touch-Numpad -->
+				<div class="cash-col-keypad">
+					<!-- 1. Kristallklares LCD Eingabe-Display -->
+					<div class="pos-screen-card">
+						<div class="pos-screen-header">
+							<span class="pos-screen-badge">
+								<span class="pulse-dot" style="background:#7fe0a8; width:7px; height:7px; display:inline-block; border-radius:50%;"></span>
+								EINGABE BARGELD
+							</span>
+							<span class="pos-screen-status" id="posInputStatus">Warte auf Eingabe...</span>
+						</div>
+						<div class="pos-screen-digits-wrap">
+							<span class="pos-screen-currency">€</span>
+							<span class="pos-screen-amount" id="cashInputDisplay">0,00</span>
+						</div>
+					</div>
+
+					<!-- 2. Schnellauswahl: Passend & Banknoten-Scheine -->
+					<div class="pos-presets-row">
+						<button type="button" class="preset-btn exact-btn" id="cashExactBtn" title="Fälligen Betrag passend setzen (Taste P)">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:15px; height:15px;"><polyline points="20 6 9 17 4 12"/></svg>
+							<span>Passend (P)</span>
+						</button>
+						<button type="button" class="preset-btn bill-btn" data-bill="500" title="5 Euro Schein">5 €</button>
+						<button type="button" class="preset-btn bill-btn" data-bill="1000" title="10 Euro Schein">10 €</button>
+						<button type="button" class="preset-btn bill-btn" data-bill="2000" title="20 Euro Schein">20 €</button>
+						<button type="button" class="preset-btn bill-btn" data-bill="5000" title="50 Euro Schein">50 €</button>
+					</div>
+
+					<!-- 3. Standard-Taschenrechner-Keypad: 7-8-9 / 4-5-6 / 1-2-3 / C-0-⌫ -->
+					<div class="numpad">
+						<button type="button" class="num-btn" data-num="7"><span class="btn-main">7</span></button>
+						<button type="button" class="num-btn" data-num="8"><span class="btn-main">8</span></button>
+						<button type="button" class="num-btn" data-num="9"><span class="btn-main">9</span></button>
+
+						<button type="button" class="num-btn" data-num="4"><span class="btn-main">4</span></button>
+						<button type="button" class="num-btn" data-num="5"><span class="btn-main">5</span></button>
+						<button type="button" class="num-btn" data-num="6"><span class="btn-main">6</span></button>
+
+						<button type="button" class="num-btn" data-num="1"><span class="btn-main">1</span></button>
+						<button type="button" class="num-btn" data-num="2"><span class="btn-main">2</span></button>
+						<button type="button" class="num-btn" data-num="3"><span class="btn-main">3</span></button>
+
+						<button type="button" class="num-btn num-clear" id="cashClearBtn" title="Eingabe leeren (Taste C)">
+							<span class="btn-main">C</span>
+							<span class="btn-sub">Leeren</span>
+						</button>
+						<button type="button" class="num-btn" data-num="0"><span class="btn-main">0</span></button>
+						<button type="button" class="num-btn num-back" id="cashBackBtn" title="Letzte Ziffer löschen (Backspace)">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:22px; height:22px;"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg>
+							<span class="btn-sub">Zurück</span>
+						</button>
+					</div>
+
+					<!-- 4. Freiwillige Spende: Eigene, übersichtliche Karte -->
+					<div class="pos-donation-card">
+						<div class="pos-donation-header">
+							<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+							<span>Spende für den Abiturjahrgang 12</span>
+						</div>
+						<div class="pos-donation-content">
+							<button type="button" class="donation-round-btn" id="cashRoundUpBtn" style="display:none;" title="Auf vollen Betrag aufrunden und Differenz spenden">
+								<span>Auf 10 € aufrunden (+3,00 € Spende)</span>
+							</button>
+							<div class="donation-chips-grid">
+								<button type="button" class="donation-chip" data-donate="100" title="1 Euro Spende">+ 1 €</button>
+								<button type="button" class="donation-chip" data-donate="200" title="2 Euro Spende">+ 2 €</button>
+								<button type="button" class="donation-chip" data-donate="500" title="5 Euro Spende">+ 5 €</button>
+								<button type="button" class="donation-chip" data-donate="1000" title="10 Euro Spende">+ 10 €</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- 5. Tastatur-Statusleiste -->
+					<div class="cash-keypad-hint">
+						<span class="hint-badge"><kbd>0–9</kbd> Ziffern</span>
+						<span class="hint-badge"><kbd>Enter</kbd> Bezahlt</span>
+						<span class="hint-badge"><kbd>P</kbd> Passend</span>
+						<span class="hint-badge"><kbd>C</kbd> Leeren</span>
+						<span class="hint-badge"><kbd>Esc</kbd> Abbrechen</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Popup: nachträglich eine Begleitung zu einer bestehenden Bestellung hinzufügen -->
+<div class="modal-overlay" id="addCompanionModalOverlay">
+ <div class="cash-modal">
+ <div class="cash-modal-name" id="addCompanionModalName"></div>
+ <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+ <label style="font-size:12px; color:var(--text-dim);" for="addCompanionModalNameInput">Name der Begleitung</label>
+ <input type="text" id="addCompanionModalNameInput" placeholder="Vor- und Nachname"
+ style="padding:10px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:14px;">
+ </div>
+ <div style="display:flex; flex-direction:column; gap:4px;">
+ <label style="font-size:12px; color:var(--text-dim);" for="addCompanionModalCategory">Altersgruppe</label>
+ <select id="addCompanionModalCategory">
+ <option value="">Alter?</option>
+ <option value="u18">U18</option>
+ <option value="ue18">Ü18</option>
+ </select>
+ </div>
+ <div id="addCompanionModalClassRow" style="display:none; flex-direction:column; gap:4px; margin-top:10px;">
+ <label style="font-size:12px; color:var(--text-dim);" for="addCompanionModalClassInput">Klasse der Begleitung (U18)</label>
+ <input type="text" id="addCompanionModalClassInput" placeholder="z.B. 10b oder 11/1"
+ style="padding:10px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:14px;">
+ </div>
+ <div id="addCompanionModalHint" style="font-size:12px; color:var(--text-dim); margin:12px 0 4px;"></div>
+ <div class="cash-modal-actions" style="margin-top:14px;">
+ <button type="button" class="secondary" id="addCompanionModalCancelBtn">Abbrechen</button>
+ <button type="button" id="addCompanionModalConfirmBtn">Hinzufügen</button>
+ </div>
+ </div>
+</div>
+
+<!-- Popup: Bestellung vollständig bearbeiten (Name, E-Mail, Kategorie, Begleitungen) -->
+<div class="modal-overlay" id="editRegModalOverlay">
+ <div class="cash-modal" style="max-width:420px; text-align:left;">
+ <div class="cash-modal-name" style="text-align:center;">Bestellung bearbeiten</div>
+
+ <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+ <label style="font-size:12px; color:var(--text-dim);" for="editRegNameInput">Name des Bestellers</label>
+ <input type="text" id="editRegNameInput"
+ style="padding:10px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:14px;">
+ </div>
+ <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+ <label style="font-size:12px; color:var(--text-dim);" for="editRegEmailInput">E-Mail</label>
+ <input type="email" id="editRegEmailInput"
+ style="padding:10px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:14px;">
+ </div>
+ <div id="editRegMailMethodRow" style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+ <label style="font-size:12px; color:var(--text-dim);" for="editRegMailMethod">E-Mail-Versandweg</label>
+ <select id="editRegMailMethod">
+ <option value="auto">Automatisch (nach Klassenstufe)</option>
+ <option value="lernsax">Immer über LernSax ✉️</option>
+ <option value="brevo">Immer über Brevo 🚀</option>
+ </select>
+ </div>
+ <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+ <label style="font-size:12px; color:var(--text-dim);" for="editRegSalutation">Anrede (Du / Sie)</label>
+ <select id="editRegSalutation">
+ <option value="du">Du (persönlich)</option>
+ <option value="sie">Sie (formell)</option>
+ </select>
+ </div>
+ <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:16px;">
+ <label style="font-size:12px; color:var(--text-dim);" for="editRegCategory">Altersgruppe des Bestellers</label>
+ <select id="editRegCategory">
+ <option value="u18">U18</option>
+ <option value="ue18">Ü18</option>
+ </select>
+ </div>
+ <div id="editRegClassRow" style="display:none; flex-direction:column; gap:4px; margin-bottom:16px;">
+ <label style="font-size:12px; color:var(--text-dim);" for="editRegClassInput">Klasse des Bestellers (U18)</label>
+ <input type="text" id="editRegClassInput" placeholder="z.B. 10b oder 11/1"
+ style="padding:10px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:14px;">
+ </div>
+
+ <div style="font-size:12px; color:var(--text-dim); font-weight:600; margin-bottom:8px;">Begleitungen</div>
+ <div id="editRegCompanionsList" style="display:flex; flex-direction:column; gap:8px;"></div>
+ <button type="button" class="add-companion-btn" id="editRegAddCompanionBtn" style="margin-top:8px; width:100%;">+ Begleitung hinzufügen</button>
+
+ <div id="editRegHint" style="font-size:11.5px; color:var(--text-dim); margin:12px 0 4px;"></div>
+ <div class="cash-modal-actions" style="margin-top:14px;">
+ <button type="button" class="secondary" id="editRegCancelBtn">Abbrechen</button>
+ <button type="button" id="editRegSaveBtn">Speichern</button>
+ </div>
+ </div>
+</div>
+
+<!-- Manuell über LernSax-Webmail senden Modal -->
+<div class="modal-overlay" id="manualLernSaxModalOverlay">
+ <div class="manual-lernsax-modal">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+   <div>
+    <div style="font-size:16px; font-weight:700; color:#fff;">Manuell über LernSax-Webmail senden</div>
+    <div id="manualLernSaxSubtitle" style="font-size:12px; color:var(--text-dim); margin-top:2px;"></div>
+   </div>
+   <button type="button" id="manualLernSaxCloseTopBtn" class="widget-modal-close-btn">✕ Schließen</button>
+  </div>
+
+  <div id="manualLernSaxErrorBox" class="manual-lernsax-error"></div>
+
+  <div style="font-size:12px; color:#b8c6e0; margin-bottom:12px; line-height:1.5;">
+   Wenn ein Schüler-Konto externe SMTP-Mails blockiert (<code style="color:#ffd6da;">550 User unknown</code>), funktioniert die Zustellung trotzdem <strong>intern direkt in LernSax-Webmail</strong>. Kopiere Empfänger, Betreff &amp; Text und füge bei bezahlten Tickets die PDFs als Anhang bei:
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:10px;">
+   <div>
+    <label style="display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:4px;">Empfänger (An)</label>
+    <div class="manual-copy-row">
+     <input type="text" id="manualLernSaxToInput" readonly>
+     <button type="button" class="manual-copy-btn" data-copy-target="manualLernSaxToInput">Kopieren</button>
+    </div>
+   </div>
+   <div>
+    <label style="display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:4px;">Betreff</label>
+    <div class="manual-copy-row">
+     <input type="text" id="manualLernSaxSubjectInput" readonly>
+     <button type="button" class="manual-copy-btn" data-copy-target="manualLernSaxSubjectInput">Kopieren</button>
+    </div>
+   </div>
+   <div>
+    <label style="display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:4px;">Nachrichtentext</label>
+    <div class="manual-copy-row">
+     <textarea id="manualLernSaxBodyInput" readonly></textarea>
+     <button type="button" class="manual-copy-btn" data-copy-target="manualLernSaxBodyInput">Text kopieren</button>
+    </div>
+   </div>
+  </div>
+
+  <div class="manual-lernsax-attach-row" id="manualLernSaxAttachRow">
+   <button type="button" class="pdf-btn" id="manualLernSaxPdfBtn" style="padding:8px 13px; font-size:12px;">Tickets-PDF laden</button>
+   <button type="button" class="invoice-btn" id="manualLernSaxInvoiceBtn" style="padding:8px 13px; font-size:12px;">Quittung-PDF laden</button>
+   <a href="https://www.lernsax.de" target="_blank" rel="noopener noreferrer" class="manual-lernsax-open-link">LernSax öffnen ↗</a>
+  </div>
+
+  <div class="cash-modal-actions" style="margin-top:16px;">
+   <button type="button" class="secondary" id="manualLernSaxCancelBtn">Schließen</button>
+   <button type="button" id="manualLernSaxMarkSentBtn" style="background:linear-gradient(135deg,#7fe0a8,#59c68a); color:#07130d; font-weight:700;">✓ Als über LernSax gesendet markieren</button>
+  </div>
+ </div>
+</div>
+
+<!-- Kassensturz-Modal (Pausen-Filter, Stückelung U18/Ü18, Einnahmen ohne Klassenfilter) -->
+<div class="modal-overlay" id="kassensturzModalOverlay">
+ <div class="kassensturz-modal">
+ <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+ <div style="display:flex; align-items:center; gap:10px;">
+ <div style="width:36px; height:36px; border-radius:10px; background:rgba(255,210,127,0.18); display:flex; align-items:center; justify-content:center; color:#ffd27f;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:20px; height:20px;"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 6v12"/></svg>
+ </div>
+ <div>
+ <div style="font-size:18px; font-weight:800; color:#fff;"> Kassensturz &amp; Pausenabrechnung</div>
+ <div style="font-size:12px; color:var(--text-dim);">Einnahmen-Überblick · Schnelles Geldzählen nach den Pausen</div>
+ </div>
+ </div>
+ <button type="button" class="modal-close" id="kassensturzCloseX" style="background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:20px; padding:4px;"></button>
+ </div>
+
+ <!-- Zeitraum-Filter-Pills -->
+ <div class="kassensturz-time-pills">
+ <button type="button" class="kassensturz-pill active" data-period="today"> Heute (Gesamter Tag)</button>
+ <button type="button" class="kassensturz-pill" data-period="last30">⏱ Letzte Pause (30 Min.)</button>
+ <button type="button" class="kassensturz-pill" data-period="yesterday">⏮ Gestern</button>
+ <button type="button" class="kassensturz-pill" data-period="all"> Gesamter Vorverkauf</button>
+ </div>
+
+ <!-- Großes Kassensturz-Highlight-Ergebnis -->
+ <div class="kassensturz-hero-stat">
+ <div style="font-size:12px; color:#ffd27f; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;" id="kassensturzPeriodLabel">Einnahmen Heute</div>
+ <div class="kassensturz-hero-amount" id="kassensturzTotalAmount">0,00 €</div>
+ <div class="kassensturz-hero-breakdown" id="kassensturzBreakdownText">0 Tickets bezahlt (0× U18 · 0× Ü18)</div>
+ <div style="font-size:11.5px; color:var(--text-dim); margin-top:6px;" id="kassensturzSubDetails">Keine Barzahlungen im gewählten Zeitraum</div>
+ </div>
+
+ <!-- Statistik-Karten -->
+ <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:16px;">
+ <div style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:10px; padding:10px 12px;">
+ <div style="font-size:11px; color:var(--text-dim);">U18 TICKETS</div>
+ <div style="font-size:17px; font-weight:700; color:var(--accent-glow);" id="kStatU18">0× (0,00 €)</div>
+ </div>
+ <div style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:10px; padding:10px 12px;">
+ <div style="font-size:11px; color:var(--text-dim);">Ü18 TICKETS</div>
+ <div style="font-size:17px; font-weight:700; color:#ffd27f;" id="kStatUe18">0× (0,00 €)</div>
+ </div>
+ <div style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:10px; padding:10px 12px;">
+ <div style="font-size:11px; color:var(--text-dim);">BESTELLER / SCHÜLER</div>
+ <div style="font-size:17px; font-weight:700; color:#fff;" id="kStatOrders">0 Vorgänge</div>
+ </div>
+ <div style="background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:10px; padding:10px 12px;">
+ <div style="font-size:11px; color:var(--text-dim);">TICKETS GESAMT</div>
+				<div style="font-size:17px; font-weight:700; color:var(--success);" id="kStatTickets">0 Tickets</div>
+			</div>
+			<div style="background:rgba(255,210,127,0.06); border:1px solid rgba(255,210,127,0.25); border-radius:10px; padding:10px 12px;">
+				<div style="font-size:11px; color:#ffd27f; font-weight:700;">💛 SPENDEN</div>
+				<div style="font-size:17px; font-weight:700; color:#ffd27f;" id="kStatDonations">0× (0,00 €)</div>
+			</div>
+ </div>
+
+ <!-- Tabelle der Einzelzahlungen -->
+ <div style="font-size:13px; font-weight:700; color:#fff; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+ <span>Erfasste Zahlungen im Zeitraum</span>
+ <span style="font-size:11px; color:var(--text-dim);" id="kassensturzListCount">0 Zahlungen</span>
+ </div>
+ <div style="max-height:220px; overflow-y:auto; border:1px solid var(--glass-border); border-radius:10px; background:rgba(0,0,0,0.2);">
+ <table class="kassensturz-table">
+ <thead>
+ <tr>
+ <th>Uhrzeit</th>
+ <th>Schüler / Besteller</th>
+ <th>Tickets</th>
+ <th>Betrag</th>
+ </tr>
+ </thead>
+ <tbody id="kassensturzTableBody"></tbody>
+ </table>
+ </div>
+
+ <!-- Modal Actions -->
+ <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; flex-wrap:wrap; gap:10px;">
+ <button type="button" id="printKassensturzBtn" style="padding:10px 18px; border-radius:var(--radius-sm); border:1px solid rgba(255,210,127,0.4); background:rgba(255,210,127,0.15); color:#ffd27f; font-weight:700; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:8px;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px; height:15px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+ <span> Kassenabschluss drucken</span>
+ </button>
+ <button type="button" class="secondary" id="kassensturzCloseBtn" style="padding:10px 20px; border-radius:var(--radius-sm); border:1px solid var(--glass-border); background:rgba(255,255,255,0.06); color:var(--text); cursor:pointer;">Schließen</button>
+ </div>
+ </div>
+</div>
+
+<!-- Druckfähige Notfall-Gästeliste Modal (Vorschau & Drucksteuerung) -->
+<div class="modal-overlay" id="emergencyPrintModalOverlay">
+ <div class="emergency-print-modal">
+ <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+ <div style="display:flex; align-items:center; gap:10px;">
+ <div style="width:38px; height:38px; border-radius:10px; background:rgba(143,180,255,0.18); display:flex; align-items:center; justify-content:center; color:var(--accent-glow);">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:20px; height:20px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+ </div>
+ <div>
+ <div style="font-size:18px; font-weight:800; color:#fff;"> Druckfähige Notfall-Gästeliste (PDF / A4)</div>
+ <div style="font-size:12px; color:var(--text-dim);">DIN A4 optimiert für Einlasskontrolle bei Internetausfall</div>
+ </div>
+ </div>
+ <button type="button" class="modal-close" id="emergencyPrintCloseX" style="background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:20px; padding:4px;"></button>
+ </div>
+
+ <!-- Steuerung & Optionen -->
+ <div style="display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:10px; padding:12px 14px;">
+ <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+ <label style="font-size:12.5px; color:var(--text); display:flex; align-items:center; gap:6px;">
+ <span>Sortierung:</span>
+ <select id="emergencySortSelect" style="padding:6px 10px; font-size:12px; border-radius:6px; background:rgba(255,255,255,0.08); border:1px solid var(--glass-border); color:#fff;">
+ <option value="lastname">Alphabetisch nach Nachname (A–Z)</option>
+ <option value="firstname">Alphabetisch nach Vorname (A–Z)</option>
+ </select>
+ </label>
+ <label style="font-size:12.5px; color:var(--text); display:flex; align-items:center; gap:6px;">
+ <span>Filter:</span>
+ <select id="emergencyFilterSelect" style="padding:6px 10px; font-size:12px; border-radius:6px; background:rgba(255,255,255,0.08); border:1px solid var(--glass-border); color:#fff;">
+ <option value="all">Alle Gäste (Notfall-Komplettliste)</option>
+ <option value="paid">Nur bezahlte Gäste</option>
+ <option value="unpaid">Nur unbezahlte Gäste</option>
+ </select>
+ </label>
+ </div>
+ <div style="display:flex; gap:8px;">
+ <button type="button" id="executePrintBtn" class="primary" style="padding:9px 18px; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:7px;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:15px; height:15px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+ <span>Jetzt drucken / Als PDF speichern</span>
+ </button>
+ </div>
+ </div>
+
+ <!-- Vorschau-Fenster des Druckblatts -->
+ <div class="print-sheet-preview" id="emergencyPrintPreview"></div>
+
+ <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--text-dim); margin-top:10px;">
+ <span> Im Browser-Druckdialog als Ziel „Als PDF speichern“ wählen für eine PDF-Datei.</span>
+ <button type="button" class="secondary" id="emergencyPrintCloseBtn" style="padding:8px 16px;">Schließen</button>
+ </div>
+ </div>
+</div>
+
+<!-- Mobile Native App Bottom Navigation Bar -->
+<nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Mobile Navigation">
+ <button type="button" class="mobile-nav-item active" data-tab="orders">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+ <span>Bestellungen</span>
+ <span class="mobile-nav-badge" id="mobileBadgeOrders">0</span>
+ </button>
+ <button type="button" class="mobile-nav-item" data-tab="guestlist">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+ <span>Einlass</span>
+ <span class="mobile-nav-badge" id="mobileBadgeGuests">0</span>
+ </button>
+ <button type="button" class="mobile-nav-item" data-tab="insights">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+ <span>Insights</span>
+ <span class="mobile-nav-badge" id="mobileBadgeLive" style="background:rgba(127,224,168,0.25); border-color:#7fe0a8; color:#7fe0a8;">0</span>
+ </button>
+ <button type="button" class="mobile-nav-item" id="mobileMoreBtn">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/></svg>
+ <span>Mehr</span>
+ </button>
+</nav>
+
+<!-- Mobile "Mehr" Sheet Modal -->
+<div class="mobile-more-sheet" id="mobileMoreSheet">
+ <div class="mobile-more-card">
+ <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.08);">
+ <div style="display:flex; align-items:center; gap:8px;">
+ <div style="width:28px; height:28px; border-radius:8px; background:rgba(143,180,255,0.18); display:flex; align-items:center; justify-content:center; color:var(--accent);">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+ </div>
+ <span style="font-size:15px; font-weight:800; color:#fff;">Weitere Bereiche &amp; Aktionen</span>
+ </div>
+ <button type="button" id="mobileMoreCloseBtn" style="background:none; border:none; color:var(--text-dim); font-size:20px; cursor:pointer; padding:4px;">✕</button>
+ </div>
+ <div class="mobile-more-grid">
+ <div class="mobile-more-item" data-action="tab-settings">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+ <span>Einstellungen</span>
+ </div>
+ <div class="mobile-more-item" data-action="tab-ratings">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+ <span>Bewertungen</span>
+ </div>
+ <div class="mobile-more-item" data-action="kassensturz">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color:#ffd27f;"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 6v12"/></svg>
+ <span>Kassensturz</span>
+ </div>
+ <div class="mobile-more-item" data-action="emergency-print">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color:#8fb4ff;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+ <span>Notfall-Liste</span>
+ </div>
+ <div class="mobile-more-item" data-action="pwa-install" id="mobileMoreInstallItem" style="grid-column: 1 / -1; background: linear-gradient(135deg, rgba(143,180,255,0.18), rgba(127,224,168,0.12)); border-color: rgba(143,180,255,0.4);">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color:#7fe0a8;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+ <div style="flex:1;">
+ <div style="font-weight:700; color:#fff;">App zum Startbildschirm</div>
+ <div style="font-size:11px; color:var(--text-dim);">Als Handy-App installieren</div>
+ </div>
+ <span style="font-size:12px; color:var(--accent); font-weight:700;">Installieren →</span>
+ </div>
+ <div class="mobile-more-item" data-action="refresh" style="color:var(--text-dim);">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+ <span>Aktualisieren</span>
+ </div>
+ <div class="mobile-more-item" data-action="logout" style="color:var(--error); border-color:rgba(255,128,128,0.3); background:rgba(255,128,128,0.06);">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color:var(--error);"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+ <span>Abmelden</span>
+ </div>
+ </div>
+ </div>
+</div>
+
+<!-- iOS Safari Installation Guide Modal -->
+<div class="ios-guide-modal" id="iosInstallModal">
+ <div class="ios-guide-card">
+ <div style="width:48px; height:48px; border-radius:14px; background:linear-gradient(135deg, rgba(143,180,255,0.25), rgba(127,224,168,0.2)); border:1.5px solid rgba(143,180,255,0.45); display:inline-flex; align-items:center; justify-content:center; margin-bottom:12px; box-shadow:0 6px 20px rgba(143,180,255,0.3);">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px; height:24px; color:#fff;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+ </div>
+ <h3 style="font-size:18px; font-weight:800; color:#fff; margin-bottom:4px;">Winterball Admin installieren</h3>
+ <p style="font-size:12.5px; color:var(--text-dim); margin-bottom:16px;">Füge die App zu deinem iPhone- oder iPad-Startbildschirm hinzu:</p>
+ 
+ <div class="ios-step">
+ <div class="ios-step-num">1</div>
+ <div>Tippe unten in der Safari-Leiste auf das <span class="ios-icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px; vertical-align:middle; margin-right:3px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>Teilen-Symbol</span>.</div>
+ </div>
+ 
+ <div class="ios-step">
+ <div class="ios-step-num">2</div>
+ <div>Scrolle im Menü nach unten und wähle <strong style="color:#fff;">„Zum Home-Bildschirm“</strong> <span class="ios-icon-badge">➕</span>.</div>
+ </div>
+ 
+ <div class="ios-step">
+ <div class="ios-step-num">3</div>
+ <div>Tippe oben rechts auf <strong style="color:var(--accent);">„Hinzufügen“</strong>. Fertig!</div>
+ </div>
+ 
+ <button type="button" id="iosModalCloseBtn" style="margin-top:18px; width:100%; padding:12px; border-radius:12px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14); color:#fff; font-size:14px; font-weight:700; cursor:pointer;">
+ Verstanden
+ </button>
+ </div>
+</div>
+
+<!-- Unsichtbarer Druck-Container (wird bei @media print aktiv und formatiert) -->
+<div id="printContainer" style="display:none;"></div>
+
+<div id="adminToast" class="admin-toast"></div>
+
+<script type="module">
+ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+ import { getFirestore, collection, addDoc, doc, getDoc, writeBatch, onSnapshot, query, where, orderBy, updateDoc, deleteDoc, setDoc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+ const firebaseConfig = {
+ apiKey: "AIzaSyDQaRxga3bFrNkyU6E_sQpp5_0G4ApInOg",
+ authDomain: "winterball-27.firebaseapp.com",
+ projectId: "winterball-27",
+ storageBucket: "winterball-27.firebasestorage.app",
+ messagingSenderId: "487160103602",
+ appId: "1:487160103602:web:961a10f85bfdf77d3f7fab"
+ };
+
+ const app = initializeApp(firebaseConfig);
+ const db = getFirestore(app);
+ const auth = getAuth(app);
+
+ const WORKER_URL = "https://winterball-worker.kollnerlenny.workers.dev";
+
+ async function workerFetch(endpoint, options = {}) {
+ if (window.location.hostname !== 'winterball27.de' && window.location.hostname !== 'www.winterball27.de') {
+ try {
+ const proxyRes = await fetch('/api' + endpoint, options);
+ if (proxyRes.ok) return proxyRes;
+ } catch (err) {
+ console.warn('Proxy-Aufruf fehlgeschlagen, versuche direkten Worker:', err);
+ }
+ }
+ return fetch(WORKER_URL + endpoint, options);
+ }
+
+ // --- Custom-Dropdown: ersetzt <select> visuell durch das Winterball-Design,
+ // das native <select> bleibt (unsichtbar) bestehen, damit der Rest des Codes
+ // ganz normal .value lesen/schreiben und auf 'change' hören kann. ---
+ function enhanceSelect(select){
+ if (!select || select.dataset.csEnhanced) return;
+ select.dataset.csEnhanced = '1';
+
+ const wrap = document.createElement('div');
+ wrap.className = 'cs-wrap';
+ select.parentNode.insertBefore(wrap, select);
+ wrap.appendChild(select);
+
+ const trigger = document.createElement('div');
+ trigger.className = 'cs-trigger';
+ trigger.tabIndex = 0;
+ trigger.innerHTML = '<span class="cs-label"></span><span class="cs-arrow"></span>';
+ const label = trigger.querySelector('.cs-label');
+
+ const panel = document.createElement('div');
+ panel.className = 'cs-panel';
+
+ function renderOptions(){
+ panel.innerHTML = '';
+ Array.from(select.options).forEach(opt => {
+ const o = document.createElement('div');
+ o.className = 'cs-option' + (opt.value === select.value ? ' active' : '');
+ o.textContent = opt.textContent;
+ o.addEventListener('click', () => {
+ select.value = opt.value;
+ select.dispatchEvent(new Event('change', { bubbles: true }));
+ syncLabel();
+ close();
+ });
+ panel.appendChild(o);
+ });
+ }
+ function syncLabel(){
+ const opt = select.options[select.selectedIndex];
+ label.textContent = opt ? opt.textContent : '';
+ trigger.classList.toggle('placeholder', !select.value);
+ }
+ function open(){ wrap.classList.add('open'); renderOptions(); document.addEventListener('click', onDocClick); }
+ function close(){ wrap.classList.remove('open'); document.removeEventListener('click', onDocClick); }
+ function onDocClick(e){ if (!wrap.contains(e.target)) close(); }
+
+ trigger.addEventListener('click', () => { wrap.classList.contains('open') ? close() : open(); });
+ trigger.addEventListener('keydown', (e) => {
+ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); wrap.classList.contains('open') ? close() : open(); }
+ if (e.key === 'Escape') close();
+ });
+
+ wrap.appendChild(trigger);
+ wrap.appendChild(panel);
+ syncLabel();
+ }
+ function enhanceAllSelects(root = document){
+ root.querySelectorAll('select').forEach(enhanceSelect);
+ }
+ enhanceAllSelects();
+
+ // Setzt die sichtbare Beschriftung eines Custom-Dropdowns zurück, wenn select.value
+ // programmatisch (nicht per Klick) geändert wurde — enhanceSelect() reagiert sonst
+ // nur auf echte Klicks auf die Optionen, nicht auf select.value= von außen.
+ function resetCustomSelectVisual(select){
+ const wrap = select.closest('.cs-wrap');
+ if (!wrap) return;
+ const label = wrap.querySelector('.cs-label');
+ const trigger = wrap.querySelector('.cs-trigger');
+ const opt = select.options[select.selectedIndex];
+ if (label) label.textContent = opt ? opt.textContent : '';
+ if (trigger) trigger.classList.toggle('placeholder', !select.value);
+ }
+
+ let allRegs = [];
+ let allTickets = [];
+ let ticketPrices = { u18: 10, ue18: 15 };
+ let lernsaxThreshold = null;
+ let scheduleLoaded = false;
+ let statsSyncTimer = null;
+ var activeGuestFilter = 'all';
+ var scheduleList = null;
+
+ // Während das "Manuell hinzufügen"-Formular offen ist, soll sich Tabelle/Statistik
+ // nicht live neu aufbauen (stört beim Ausfüllen) — die Daten selbst bleiben im
+ // Hintergrund trotzdem aktuell, angezeigt wird der neue Stand erst wieder, sobald
+ // das Formular geschlossen wird (Anlegen, Anlegen & Bezahlen, oder Abbrechen).
+ let addFormOpen = false;
+ let pendingRender = false;
+
+ function scheduleRender(){
+ if (addFormOpen) { pendingRender = true; return; }
+ render();
+ if (typeof renderGuestList === 'function') renderGuestList();
+ if (typeof renderCashierMode === 'function') renderCashierMode();
+ }
+ function scheduleCharts(){
+ if (addFormOpen) { pendingRender = true; return; }
+ updateCharts();
+ }
+ function setAddFormOpen(open){
+ addFormOpen = open;
+ if (!open && pendingRender) {
+ pendingRender = false;
+ render();
+ if (typeof renderGuestList === 'function') renderGuestList();
+ if (typeof renderCashierMode === 'function') renderCashierMode();
+ updateCharts();
+ }
+ }
+
+ // Hält den öffentlichen Live-Ticketzähler (settings/stats) mit der echten Anzahl
+ // Tickets synchron — legt das Dokument beim allerersten Mal auch gleich an.
+ // Debounced, damit nicht bei jeder einzelnen Änderung sofort geschrieben wird.
+ function syncStatsCounter(){
+ clearTimeout(statsSyncTimer);
+ statsSyncTimer = setTimeout(async () => {
+ try {
+ await setDoc(doc(db, 'settings', 'stats'), { ticketCount: allTickets.length }, { merge: true });
+ } catch (err) {
+ console.error('Ticketzähler konnte nicht synchronisiert werden:', err.message || err.code || 'Unbekannter Fehler');
+ }
+ }, 1500);
+ }
+
+ // --- Insights-Charts ---
+ // Abgesichert: falls Chart.js aus irgendeinem Grund nicht laden konnte
+ // (Netzwerk, Blocker, CDN down), darf das NICHT den Rest des Scripts
+ // (insbesondere den Login) lahmlegen.
+ if (typeof Chart !== 'undefined') {
+ Chart.defaults.color = '#9aa7c2';
+ Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif";
+ Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
+ } else {
+ console.error('Chart.js konnte nicht geladen werden — Diagramme sind deaktiviert, der Rest funktioniert normal.');
+ }
+
+ let chartViewsDaily = null, chartDevice = null, chartOS = null;
+ let chartCategory = null, chartPaid = null, chartDaily = null, chartRatings = null, chartPeakMini = null;
+
+ function tsToDate(ts){
+ if (!ts) return null;
+ if (typeof ts.toDate === 'function') return ts.toDate();
+ return new Date(ts);
+ }
+
+	// =========================================================================
+	// ZENTRALE HILFSFUNKTIONEN FÜR FINANZEN, PREISE & STATISTIKEN
+	// =========================================================================
+
+	// Robustes Parsen von Euro-Werten (verarbeitet Zahlen, Strings mit Komma "10,00", "5 €" etc.)
+	function parseMoneyNumber(val, fallback = 0) {
+		if (val === null || val === undefined || val === '') return fallback;
+		if (typeof val === 'number') {
+			return (isNaN(val) || !isFinite(val)) ? fallback : val;
+		}
+		if (typeof val === 'string') {
+			const cleaned = val.replace(/[^0-9.,-]/g, '').replace(',', '.');
+			const num = parseFloat(cleaned);
+			return (isNaN(num) || !isFinite(num)) ? fallback : num;
+		}
+		const num = Number(val);
+		return (isNaN(num) || !isFinite(num)) ? fallback : num;
+	}
+
+	// Robustes Parsen in Cent (Cent-Ganzzahl)
+	function parseMoneyCents(val, fallbackCents = 0) {
+		if (val === null || val === undefined || val === '') return fallbackCents;
+		if (typeof val === 'number') {
+			return (isNaN(val) || !isFinite(val)) ? fallbackCents : Math.round(val);
+		}
+		const euro = parseMoneyNumber(val, fallbackCents / 100);
+		const cents = Math.round(euro * 100);
+		return (isNaN(cents) || !isFinite(cents)) ? fallbackCents : cents;
+	}
+
+	// Ermittelt den Ticketpreis für eine Kategorie mit sauberen Fallbacks (U18: 10€, Ü18: 15€)
+	function getTicketPrice(category) {
+		const pU18 = parseMoneyNumber(ticketPrices?.u18, 10) || 10;
+		const pUe18 = parseMoneyNumber(ticketPrices?.ue18, 15) || 15;
+		if (category === 'u18') return pU18;
+		if (category === 'ue18') return pUe18;
+		return parseMoneyNumber(ticketPrices?.[category], pUe18);
+	}
+
+	function getTicketPriceCents(category) {
+		return Math.round(getTicketPrice(category) * 100);
+	}
+
+	// Berechnet konsistente Umsatz- & Spendenzahlen über alle Widgets hinweg
+	function calculateRevenueStats() {
+		const pU18 = getTicketPrice('u18');
+		const pUe18 = getTicketPrice('ue18');
+
+		const regMap = new Map();
+		(allRegs || []).forEach(r => { if (r && r.id) regMap.set(r.id, r); });
+
+		let projectedTicketCents = 0;
+		let actualTicketCents = 0;
+		let projectedU18Cents = 0;
+		let actualU18Cents = 0;
+		let projectedUe18Cents = 0;
+		let actualUe18Cents = 0;
+		let u18Count = 0;
+		let u18PaidCount = 0;
+		let ue18Count = 0;
+		let ue18PaidCount = 0;
+
+		(allTickets || []).forEach(t => {
+			if (!t) return;
+			const defaultPrice = (t.category === 'u18' ? pU18 : pUe18);
+			const price = (t.price !== undefined && t.price !== null && t.price !== '')
+				? parseMoneyNumber(t.price, defaultPrice)
+				: defaultPrice;
+			const c = Math.round(price * 100);
+			if (isNaN(c) || !isFinite(c)) return;
+
+			projectedTicketCents += c;
+
+			const parentReg = regMap.get(t.registrationId);
+			const isPaid = (t.paid === true) || (parentReg && parentReg.paid === true);
+
+			if (t.category === 'u18') {
+				u18Count++;
+				projectedU18Cents += c;
+				if (isPaid) {
+					actualU18Cents += c;
+					u18PaidCount++;
+				}
+			} else {
+				ue18Count++;
+				projectedUe18Cents += c;
+				if (isPaid) {
+					actualUe18Cents += c;
+					ue18PaidCount++;
+				}
+			}
+
+			if (isPaid) {
+				actualTicketCents += c;
+			}
+		});
+
+		let projectedDonationCents = 0;
+		let actualDonationCents = 0;
+		let donationCount = 0;
+		let donationPaidCount = 0;
+
+		(allRegs || []).forEach(r => {
+			if (!r) return;
+			const d = parseMoneyCents(r.donation, 0);
+			if (d > 0) {
+				projectedDonationCents += d;
+				donationCount++;
+				if (r.paid) {
+					actualDonationCents += d;
+					donationPaidCount++;
+				}
+			}
+		});
+
+		const totalProjectedCents = projectedTicketCents + projectedDonationCents;
+		const totalActualCents = actualTicketCents + actualDonationCents;
+		const openCents = Math.max(0, totalProjectedCents - totalActualCents);
+
+		return {
+			projectedTicketCents: isNaN(projectedTicketCents) ? 0 : projectedTicketCents,
+			actualTicketCents: isNaN(actualTicketCents) ? 0 : actualTicketCents,
+			projectedDonationCents: isNaN(projectedDonationCents) ? 0 : projectedDonationCents,
+			actualDonationCents: isNaN(actualDonationCents) ? 0 : actualDonationCents,
+			totalProjectedCents: isNaN(totalProjectedCents) ? 0 : totalProjectedCents,
+			totalActualCents: isNaN(totalActualCents) ? 0 : totalActualCents,
+			openCents: isNaN(openCents) ? 0 : openCents,
+			u18Count,
+			u18PaidCount,
+			ue18Count,
+			ue18PaidCount,
+			projectedU18Cents: isNaN(projectedU18Cents) ? 0 : projectedU18Cents,
+			actualU18Cents: isNaN(actualU18Cents) ? 0 : actualU18Cents,
+			projectedUe18Cents: isNaN(projectedUe18Cents) ? 0 : projectedUe18Cents,
+			actualUe18Cents: isNaN(actualUe18Cents) ? 0 : actualUe18Cents,
+			donationCount,
+			donationPaidCount
+		};
+	}
+
+	// Berechnet die Verteilung der Gäste nach Klassenstufen und Jahrgängen
+	function getGuestClassBreakdown() {
+		const classMap = new Map();
+		const regMap = new Map();
+		allRegs.forEach(r => regMap.set(r.id, r));
+
+		allTickets.forEach(t => {
+			const reg = regMap.get(t.registrationId);
+			let cl = (t.schoolClass || (reg && reg.schoolClass) || '').trim();
+			if (!cl && reg && reg.email) {
+				const g = gradeFromEmail(reg.email);
+				if (g) cl = `Jahrgang ${g}`;
+			}
+			if (!cl) {
+				cl = (t.category === 'ue18') ? 'Ü18 / Gäste' : 'Ohne Klassenangabe';
+			}
+			const normalizedKey = cl.replace(/\s+/g, ' ');
+
+			if (!classMap.has(normalizedKey)) {
+				classMap.set(normalizedKey, {
+					name: normalizedKey,
+					tickets: 0,
+					paidTickets: 0,
+					u18Count: 0,
+					ue18Count: 0
+				});
+			}
+			const item = classMap.get(normalizedKey);
+			item.tickets++;
+			const isPaid = (t.paid === true) || (reg && reg.paid === true);
+			if (isPaid) item.paidTickets++;
+			if (t.category === 'u18') item.u18Count++;
+			else item.ue18Count++;
+		});
+
+		const list = Array.from(classMap.values());
+		list.sort((a, b) => b.tickets - a.tickets || a.name.localeCompare(b.name, 'de'));
+		return list;
+	}
+
+	// Berechnet Hochrechnungskennzahlen für Saal-Kapazität & Verkaufstempo
+	function getForecastMetrics(hallCapacity) {
+		const currentTickets = allTickets.length;
+		const remainingSeats = Math.max(0, hallCapacity - currentTickets);
+		const capPercent = Math.min(100, Math.round((currentTickets / hallCapacity) * 100));
+
+		const ticketsByDay = {};
+		allTickets.forEach(t => {
+			const d = tsToDate(t.createdAt);
+			if (!d) return;
+			const k = d.toISOString().slice(0, 10);
+			ticketsByDay[k] = (ticketsByDay[k] || 0) + 1;
+		});
+
+		const sortedDays = Object.keys(ticketsByDay).sort();
+		const activeDaysCount = Math.max(1, sortedDays.length);
+		const avgTicketsPerDay = sortedDays.length > 0 ? (currentTickets / activeDaysCount).toFixed(1) : '0';
+
+		let daysToFull = null;
+		let fullDateStr = null;
+		const paceNum = parseFloat(avgTicketsPerDay);
+		if (remainingSeats <= 0) {
+			daysToFull = 0;
+		} else if (paceNum > 0) {
+			daysToFull = Math.ceil(remainingSeats / paceNum);
+			const estDate = new Date(Date.now() + daysToFull * 86400000);
+			fullDateStr = estDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+		}
+
+		return {
+			currentTickets,
+			hallCapacity,
+			remainingSeats,
+			capPercent,
+			ticketsByDay,
+			sortedDays,
+			avgTicketsPerDay,
+			daysToFull,
+			fullDateStr
+		};
+	}
+
+	
+	// Umfassende Berechnung aller Funnel-Metriken (Web, Formular, End-to-End, Kasse, Geräte)
+	function getFunnelMetrics(timeframe = 'all') {
+		const now = Date.now();
+		const filterByTime = (item) => {
+			if (!item) return false;
+			if (timeframe === 'all') return true;
+			const d = tsToDate(item.createdAt || item.timestamp);
+			if (!d) return true;
+			const cutoff = timeframe === '24h' ? 24 * 3600 * 1000 : 7 * 86400 * 1000;
+			return (now - d.getTime()) <= cutoff;
+		};
+
+		const filteredViews = allPageviews.filter(filterByTime);
+		const filteredPolls = allPolls.filter(filterByTime);
+		const filteredRegs = allRegs.filter(filterByTime);
+		const filteredTickets = allTickets.filter(filterByTime);
+
+		const homeViewsRaw = filteredViews.filter(p => !p.path || p.path === '/' || p.path.includes('index')).length;
+		const anmeldeViewsRaw = filteredViews.filter(p => p.path && p.path.includes('anmeldung')).length;
+		const anmeldeEvents = filteredPolls.filter(d => d.type === 'funnel_step' && d.step === 'page_anmeldung').length;
+		const anmeldeCount = Math.max(anmeldeViewsRaw, anmeldeEvents);
+
+		const stepNameEvents = filteredPolls.filter(d => d.type === 'funnel_step' && (d.step === 'step_name' || d.step === 'form_started')).length;
+		const stepEmailEvents = filteredPolls.filter(d => d.type === 'funnel_step' && d.step === 'step_email').length;
+		const stepCompEvents = filteredPolls.filter(d => d.type === 'funnel_step' && d.step === 'step_companion').length;
+		const stepSummaryEvents = filteredPolls.filter(d => d.type === 'funnel_step' && d.step === 'step_summary').length;
+		const regCount = filteredRegs.length;
+		const ticketCount = filteredTickets.length;
+
+		const paidRegs = filteredRegs.filter(r => r.paid).length;
+		const paidTickets = filteredTickets.filter(t => t.paid).length;
+		const openTickets = Math.max(0, ticketCount - paidTickets);
+		const checkedInTickets = filteredTickets.filter(t => t.checkedIn).length;
+
+		const revStats = calculateRevenueStats();
+		const avgPrice = ticketCount > 0 ? ((revStats.totalProjectedCents / 100) / ticketCount) : 12.5;
+		const openRevenue = Math.round(openTickets * avgPrice);
+
+		// Monotone Glättung für Formularschritte
+		const s7_submitted = regCount;
+		const s6_summary = Math.max(stepSummaryEvents, s7_submitted);
+		const s5_comp = Math.max(stepCompEvents, s6_summary);
+		const s4_email = Math.max(stepEmailEvents, s5_comp);
+		const s3_name = Math.max(stepNameEvents, s4_email);
+		const s2_anmeldung = Math.max(anmeldeCount, s3_name);
+		const s1_home = Math.max(homeViewsRaw, filteredViews.length, s2_anmeldung, s7_submitted > 0 ? s7_submitted : 1);
+
+		const formBase = Math.max(1, s1_home);
+		const formConversionRate = s1_home > 0 ? Math.min(100, Math.round((s7_submitted / formBase) * 100 * 10) / 10) : 0;
+		const formTotalDropoff = Math.max(0, Math.round(100 - (s7_submitted / formBase) * 100));
+
+		const payConversionRate = ticketCount > 0 ? Math.round((paidTickets / ticketCount) * 100) : 0;
+		const checkinConversionRate = paidTickets > 0 ? Math.round((checkedInTickets / paidTickets) * 100) : 0;
+		const fullE2ERate = formBase > 0 ? Math.min(100, Math.round((paidTickets / formBase) * 100 * 10) / 10) : 0;
+
+		// Relative Drop-offs zwischen Schritten
+		const drop1to2 = Math.max(0, Math.round((1 - (s2_anmeldung / Math.max(1, s1_home))) * 100));
+		const drop2to3 = s2_anmeldung > 0 ? Math.max(0, Math.round((1 - (s3_name / s2_anmeldung)) * 100)) : 0;
+		const drop3to4 = s3_name > 0 ? Math.max(0, Math.round((1 - (s4_email / s3_name)) * 100)) : 0;
+		const drop4to5 = s4_email > 0 ? Math.max(0, Math.round((1 - (s5_comp / s4_email)) * 100)) : 0;
+		const drop5to6 = s5_comp > 0 ? Math.max(0, Math.round((1 - (s6_summary / s5_comp)) * 100)) : 0;
+		const drop6to7 = s6_summary > 0 ? Math.max(0, Math.round((1 - (s7_submitted / s6_summary)) * 100)) : 0;
+
+		const formDrops = [
+			{ name: 'Startseite → Anmeldeseite', rate: drop1to2, from: s1_home, to: s2_anmeldung, stepIndex: 1 },
+			{ name: 'Anmeldeseite → Name', rate: drop2to3, from: s2_anmeldung, to: s3_name, stepIndex: 2 },
+			{ name: 'Name → E-Mail', rate: drop3to4, from: s3_name, to: s4_email, stepIndex: 3 },
+			{ name: 'E-Mail → Begleitung', rate: drop4to5, from: s4_email, to: s5_comp, stepIndex: 4 },
+			{ name: 'Begleitung → Zusammenfassung', rate: drop5to6, from: s5_comp, to: s6_summary, stepIndex: 5 },
+			{ name: 'Zusammenfassung → Buchung', rate: drop6to7, from: s6_summary, to: s7_submitted, stepIndex: 6 }
+		].sort((a,b) => b.rate - a.rate);
+
+		const biggestHurdle = formDrops[0] || { name: 'Keine Hürde', rate: 0 };
+
+		// Device comparison
+		const isMobileDevice = (d) => {
+			const s = ((d.device || '') + ' ' + (d.os || '')).toLowerCase();
+			return s.includes('mobile') || s.includes('ios') || s.includes('android') || s.includes('iphone') || s.includes('phone');
+		};
+
+		const mobileViews = filteredViews.filter(isMobileDevice).length;
+		const desktopViews = Math.max(0, filteredViews.length - mobileViews);
+
+		const mobileSteps = filteredPolls.filter(d => d.type === 'funnel_step' && isMobileDevice(d));
+		const desktopSteps = filteredPolls.filter(d => d.type === 'funnel_step' && !isMobileDevice(d));
+
+		const mobName = mobileSteps.filter(d => d.step === 'step_name' || d.step === 'form_started').length;
+		const mobEmail = mobileSteps.filter(d => d.step === 'step_email').length;
+		const mobComp = mobileSteps.filter(d => d.step === 'step_companion').length;
+		const mobSummary = mobileSteps.filter(d => d.step === 'step_summary').length;
+
+		const deskName = desktopSteps.filter(d => d.step === 'step_name' || d.step === 'form_started').length;
+		const deskEmail = desktopSteps.filter(d => d.step === 'step_email').length;
+		const deskComp = desktopSteps.filter(d => d.step === 'step_companion').length;
+		const deskSummary = desktopSteps.filter(d => d.step === 'step_summary').length;
+
+		// Age category payment metrics
+		const u18Tickets = filteredTickets.filter(t => t.category === 'u18');
+		const ue18Tickets = filteredTickets.filter(t => t.category === 'ue18');
+		const u18Paid = u18Tickets.filter(t => t.paid).length;
+		const ue18Paid = ue18Tickets.filter(t => t.paid).length;
+
+		return {
+			timeframe,
+			s1_home, s2_anmeldung, s3_name, s4_email, s5_comp, s6_summary, s7_submitted,
+			formConversionRate, formTotalDropoff,
+			drop1to2, drop2to3, drop3to4, drop4to5, drop5to6, drop6to7,
+			biggestHurdle,
+			regCount, ticketCount, paidRegs, paidTickets, openTickets, openRevenue, checkedInTickets,
+			payConversionRate, checkinConversionRate, fullE2ERate,
+			u18Total: u18Tickets.length, u18Paid, u18Open: u18Tickets.length - u18Paid,
+			ue18Total: ue18Tickets.length, ue18Paid, ue18Open: ue18Tickets.length - ue18Paid,
+			mobileViews, desktopViews,
+			mobileCounts: [mobName, mobEmail, mobComp, mobSummary],
+			desktopCounts: [deskName, deskEmail, deskComp, deskSummary]
+		};
+	}
+
+function updateCharts(){
+		if (typeof Chart === 'undefined') return;
+
+		// --- 0) KPI-Kacheln für Aufrufe & Besucher ---
+		const totalViews = allPageviews.length;
+		const todayKey = new Date().toISOString().slice(0, 10);
+		const viewsToday = allPageviews.filter(p => {
+			const d = tsToDate(p.createdAt);
+			return d && d.toISOString().slice(0, 10) === todayKey;
+		}).length;
+
+		const mobileCount = allPageviews.filter(p => p.device === 'mobile').length;
+		const desktopCount = allPageviews.filter(p => p.device === 'desktop').length;
+		const tabletCount = allPageviews.filter(p => p.device === 'tablet').length;
+		const mobilePct = totalViews > 0 ? Math.round((mobileCount / totalViews) * 100) : 0;
+
+		const osCounts = {};
+		allPageviews.forEach(p => {
+			const os = p.os || 'Anderes';
+			osCounts[os] = (osCounts[os] || 0) + 1;
+		});
+		const sortedOSKeys = Object.keys(osCounts).sort((a, b) => osCounts[b] - osCounts[a]);
+		const topOS = sortedOSKeys[0];
+		const topOSPct = topOS && totalViews > 0 ? Math.round((osCounts[topOS] / totalViews) * 100) : 0;
+
+		// Stat Kacheln & Widget-Karten aktualisieren
+		const elViewsToday = document.getElementById('statViewsToday');
+		if (elViewsToday) elViewsToday.textContent = viewsToday;
+		const elViewsTodaySub = document.getElementById('statViewsTodaySub');
+		if (elViewsTodaySub) elViewsTodaySub.textContent = viewsToday === 1 ? '1 Aufruf heute' : `${viewsToday} Aufrufe heute`;
+		const elViewsTotal = document.getElementById('statViewsTotal');
+		if (elViewsTotal) elViewsTotal.textContent = totalViews;
+		const elMobilePct = document.getElementById('statMobilePercent');
+		if (elMobilePct) elMobilePct.textContent = `${mobilePct}%`;
+		const elMobileSub = document.getElementById('statMobileSub');
+		if (elMobileSub) elMobileSub.textContent = `${mobileCount} von ${totalViews} Aufrufen`;
+		const elTopPlatform = document.getElementById('statTopPlatform');
+		if (elTopPlatform) elTopPlatform.textContent = topOS ? `${topOS} (${topOSPct}%)` : '–';
+
+		// Widget Elemente
+		const elWViewsToday = document.getElementById('widgetViewsToday');
+		if (elWViewsToday) elWViewsToday.textContent = viewsToday;
+		const elWViewsTotal = document.getElementById('widgetViewsTotal');
+		if (elWViewsTotal) elWViewsTotal.textContent = totalViews;
+		const elWMobilePct = document.getElementById('widgetMobilePct');
+		if (elWMobilePct) elWMobilePct.textContent = `${mobilePct}%`;
+		const elWDevBreakdown = document.getElementById('widgetDeviceBreakdown');
+		if (elWDevBreakdown) elWDevBreakdown.textContent = totalViews > 0 ? `${mobileCount} Mobil · ${desktopCount} PC · ${tabletCount} Tablet` : 'Noch keine Aufrufe';
+		const elWTopOS = document.getElementById('widgetTopOS');
+		if (elWTopOS) elWTopOS.textContent = topOS ? `${topOS} (${topOSPct}%)` : '–';
+		const elWOSCount = document.getElementById('widgetOSCount');
+		if (elWOSCount) elWOSCount.textContent = sortedOSKeys.length > 0 ? `${sortedOSKeys.length} System${sortedOSKeys.length !== 1 ? 'e' : ''} erkannt` : 'Warte auf Daten';
+		const elWOrders = document.getElementById('widgetOrdersCount');
+		if (elWOrders) elWOrders.textContent = allRegs.length;
+		const elWTickets = document.getElementById('widgetTicketsCount');
+		if (elWTickets) elWTickets.textContent = allTickets.length;
+
+		// --- 1) Website-Aufrufe im Zeitverlauf (Line-Chart) ---
+		const viewsDailyCanvas = document.getElementById('chartViewsDaily');
+		if (viewsDailyCanvas) {
+			const viewsByDay = {};
+			allPageviews.forEach(p => {
+				const d = tsToDate(p.createdAt);
+				if (!d) return;
+				const key = d.toISOString().slice(0, 10);
+				viewsByDay[key] = (viewsByDay[key] || 0) + 1;
+			});
+
+			const sortedDays = Object.keys(viewsByDay).sort();
+			const dayLabels = sortedDays.map(k => {
+				const [y, m, dd] = k.split('-');
+				return `${dd}.${m}.`;
+			});
+
+			if (chartViewsDaily) chartViewsDaily.destroy();
+
+			if (sortedDays.length === 0) {
+				const ctx = viewsDailyCanvas.getContext('2d');
+				ctx.clearRect(0, 0, viewsDailyCanvas.width, viewsDailyCanvas.height);
+			} else {
+				const ctx = viewsDailyCanvas.getContext('2d');
+				const grad = ctx.createLinearGradient(0, 0, 0, 110);
+				grad.addColorStop(0, 'rgba(143, 180, 255, 0.42)');
+				grad.addColorStop(1, 'rgba(143, 180, 255, 0.02)');
+
+				chartViewsDaily = new Chart(viewsDailyCanvas, {
+					type: 'line',
+					data: {
+						labels: dayLabels,
+						datasets: [{
+							label: 'Aufrufe',
+							data: sortedDays.map(k => viewsByDay[k]),
+							borderColor: '#8fb4ff',
+							backgroundColor: grad,
+							fill: true,
+							tension: 0.35,
+							pointRadius: 3,
+							pointHoverRadius: 5,
+							pointBackgroundColor: '#8fb4ff',
+							pointBorderColor: '#0e1626',
+							pointBorderWidth: 1.5,
+							borderWidth: 2
+						}]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: {
+							legend: { display: false },
+							tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.y} Aufruf${ctx.parsed.y !== 1 ? 'e' : ''}` } }
+						},
+						scales: {
+							y: { beginAtZero: true, ticks: { precision: 0, color: '#9aa7c2', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' } },
+							x: { ticks: { color: '#9aa7c2', font: { size: 10 } }, grid: { display: false } }
+						}
+					}
+				});
+			}
+		}
+
+		// --- 2) Gerätetypen (Smartphone vs PC vs Tablet) ---
+		const deviceCanvas = document.getElementById('chartDevice');
+		if (deviceCanvas) {
+			if (chartDevice) chartDevice.destroy();
+			const totalDev = mobileCount + desktopCount + tabletCount;
+			chartDevice = new Chart(deviceCanvas, {
+				type: 'doughnut',
+				data: {
+					labels: ['Smartphone', 'Desktop / PC', 'Tablet'],
+					datasets: [{
+						data: totalDev > 0 ? [mobileCount, desktopCount, tabletCount] : [0, 0, 0],
+						backgroundColor: ['#7fe0a8', '#8fb4ff', '#ffd27f'],
+						borderColor: '#131c30',
+						borderWidth: 2
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { display: false },
+						tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw} (${totalDev > 0 ? Math.round((ctx.raw/totalDev)*100) : 0}%)` } }
+					},
+					cutout: '66%'
+				}
+			});
+		}
+
+		// --- 3) Betriebssysteme (iOS, Android, Windows, macOS...) ---
+		const osCanvas = document.getElementById('chartOS');
+		if (osCanvas) {
+			if (chartOS) chartOS.destroy();
+			const osPalette = ['#8fb4ff', '#a78bfa', '#7fe0a8', '#ffd27f', '#f472b6', '#94a3b8'];
+			chartOS = new Chart(osCanvas, {
+				type: 'doughnut',
+				data: {
+					labels: sortedOSKeys.length > 0 ? sortedOSKeys : ['Keine Daten'],
+					datasets: [{
+						data: sortedOSKeys.length > 0 ? sortedOSKeys.map(k => osCounts[k]) : [1],
+						backgroundColor: sortedOSKeys.length > 0 ? sortedOSKeys.map((_, i) => osPalette[i % osPalette.length]) : ['rgba(255,255,255,0.08)'],
+						borderColor: '#131c30',
+						borderWidth: 2
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { display: false },
+						tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } }
+					},
+					cutout: '66%'
+				}
+			});
+		}
+
+		// --- 4) U18 / Ü18 & Bezahlstatus (Demografie & Finanzen) ---
+		const revStats = calculateRevenueStats();
+		const elCatRatio = document.getElementById('widgetCatRatio');
+		if (elCatRatio) elCatRatio.textContent = `${revStats.u18Count} U18 / ${revStats.ue18Count} Ü18`;
+
+		const catCanvas = document.getElementById('chartCategory');
+		if (catCanvas) {
+			if (chartCategory) chartCategory.destroy();
+			chartCategory = new Chart(catCanvas, {
+				type: 'doughnut',
+				data: {
+					labels: ['Unter 18 (U18)', '18 oder älter (Ü18)'],
+					datasets: [{
+						data: (revStats.u18Count + revStats.ue18Count > 0) ? [revStats.u18Count, revStats.ue18Count] : [0, 0],
+						backgroundColor: ['#8fb4ff', '#7fe0a8'],
+						borderColor: '#131c30',
+						borderWidth: 2
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: { legend: { display: false } },
+					cutout: '64%'
+				}
+			});
+		}
+
+		// --- 5) Bezahlt vs. offen ---
+		const totalTicketsCount = revStats.u18Count + revStats.ue18Count;
+		const totalPaidTickets = revStats.u18PaidCount + revStats.ue18PaidCount;
+		const totalOpenTickets = Math.max(0, totalTicketsCount - totalPaidTickets);
+		const elPaidRatio = document.getElementById('widgetPaidRatio');
+		if (elPaidRatio) {
+			elPaidRatio.textContent = totalTicketsCount > 0 ? `${totalPaidTickets}/${totalTicketsCount} bezahlt` : '0 bezahlt';
+		}
+
+		const paidCanvas = document.getElementById('chartPaid');
+		if (paidCanvas) {
+			if (chartPaid) chartPaid.destroy();
+			chartPaid = new Chart(paidCanvas, {
+				type: 'doughnut',
+				data: {
+					labels: ['Bezahlt', 'Offen'],
+					datasets: [{
+						data: totalTicketsCount > 0 ? [totalPaidTickets, totalOpenTickets] : [0, 0],
+						backgroundColor: ['#7fe0a8', '#ffd27f'],
+						borderColor: '#131c30',
+						borderWidth: 2
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: { legend: { display: false } },
+					cutout: '64%'
+				}
+			});
+		}
+
+		// --- 6) Anmeldungen pro Tag ---
+		const dailyCanvas = document.getElementById('chartDaily');
+		if (dailyCanvas) {
+			const dayCounts = {};
+			allRegs.forEach(r => {
+				const d = tsToDate(r.createdAt);
+				if (!d) return;
+				const key = d.toISOString().slice(0, 10);
+				dayCounts[key] = (dayCounts[key] || 0) + 1;
+			});
+			const sortedDays = Object.keys(dayCounts).sort();
+			const dayLabels = sortedDays.map(k => {
+				const [y,m,dd] = k.split('-');
+				return `${dd}.${m}.`;
+			});
+
+			if (chartDaily) chartDaily.destroy();
+			if (sortedDays.length === 0) {
+				const ctx = dailyCanvas.getContext('2d');
+				ctx.clearRect(0, 0, dailyCanvas.width, dailyCanvas.height);
+			} else {
+				const ctx = dailyCanvas.getContext('2d');
+				const grad = ctx.createLinearGradient(0, 0, 0, 110);
+				grad.addColorStop(0, 'rgba(255, 210, 127, 0.42)');
+				grad.addColorStop(1, 'rgba(255, 210, 127, 0.02)');
+
+				chartDaily = new Chart(dailyCanvas, {
+					type: 'line',
+					data: {
+						labels: dayLabels,
+						datasets: [{
+							label: 'Neue Anmeldungen',
+							data: sortedDays.map(k => dayCounts[k]),
+							borderColor: '#ffd27f',
+							backgroundColor: grad,
+							fill: true,
+							tension: 0.3,
+							pointRadius: 3,
+							pointHoverRadius: 5,
+							pointBackgroundColor: '#ffd27f',
+							pointBorderColor: '#0e1626',
+							pointBorderWidth: 1.5,
+							borderWidth: 2
+						}]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: {
+							legend: { display: false },
+							tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.y} Buchung${ctx.parsed.y !== 1 ? 'en' : ''}` } }
+						},
+						scales: {
+							y: { beginAtZero: true, ticks: { precision: 0, color: '#9aa7c2', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' } },
+							x: { ticks: { color: '#9aa7c2', font: { size: 10 } }, grid: { display: false } }
+						}
+					}
+				});
+			}
+		}
+
+		// --- 7) Funnel & Absprung-Analyse Widget ---
+		const fm = getFunnelMetrics('all');
+		const elWFunnelRate = document.getElementById('widgetFunnelRate');
+		const elWFunnelRateLbl = document.getElementById('widgetFunnelRateLabel');
+		const elWFunnelDrop = document.getElementById('widgetFunnelDropoff');
+		const elWFunnelBars = document.getElementById('widgetFunnelMiniBars');
+		const elBottle = document.getElementById('widgetFunnelBottleneck');
+
+		// Update sub-tab buttons in widget
+		['form', 'lifecycle', 'e2e'].forEach(mKey => {
+			const b = document.getElementById('fwTab' + (mKey === 'form' ? 'Form' : (mKey === 'lifecycle' ? 'Life' : 'E2e')));
+			if (b) {
+				const isActive = currentFunnelWidgetMode === mKey;
+				b.style.background = isActive ? 'rgba(143,180,255,0.22)' : 'transparent';
+				b.style.color = isActive ? '#8fb4ff' : '#9aa7c2';
+				b.style.fontWeight = isActive ? '700' : '600';
+			}
+		});
+
+		if (currentFunnelWidgetMode === 'lifecycle') {
+			if (elWFunnelRate) elWFunnelRate.textContent = `${fm.payConversionRate}%`;
+			if (elWFunnelRateLbl) elWFunnelRateLbl.textContent = ' Bezahlquote';
+			if (elWFunnelDrop) elWFunnelDrop.textContent = `${fm.openTickets} offen (${fm.openRevenue} €)`;
+
+			const base = Math.max(1, fm.ticketCount);
+			const p1 = 100;
+			const p2 = Math.min(100, Math.round((fm.paidTickets / base) * 100));
+			const p3 = Math.min(100, Math.round((fm.checkedInTickets / base) * 100));
+
+			if (elWFunnelBars) {
+				elWFunnelBars.innerHTML = `
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:78px; flex-shrink:0;">1. Bestellt</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p1}%; height:100%; background:#8fb4ff; border-radius:3px;"></div>
+						</div>
+						<span style="width:42px; text-align:right; color:#fff; font-weight:700;">${fm.ticketCount}</span>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:78px; flex-shrink:0;">2. Bezahlt</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p2}%; height:100%; background:#7fe0a8; border-radius:3px;"></div>
+						</div>
+						<span style="width:42px; text-align:right; color:#7fe0a8; font-weight:700;">${fm.paidTickets}</span>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:78px; flex-shrink:0;">3. Eingecheckt</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p3}%; height:100%; background:#ffd27f; border-radius:3px;"></div>
+						</div>
+						<span style="width:42px; text-align:right; color:#ffd27f; font-weight:700;">${fm.checkedInTickets}</span>
+					</div>
+				`;
+			}
+			if (elBottle) {
+				elBottle.textContent = fm.openTickets > 0
+					? `Offen: ${fm.openTickets} unbezahlte Tickets (${fm.openRevenue} € noch ausstehend)`
+					: 'Alle Tickets vollständig bezahlt!';
+			}
+		} else if (currentFunnelWidgetMode === 'e2e') {
+			if (elWFunnelRate) elWFunnelRate.textContent = `${fm.fullE2ERate}%`;
+			if (elWFunnelRateLbl) elWFunnelRateLbl.textContent = ' End-to-End';
+			if (elWFunnelDrop) elWFunnelDrop.textContent = `${Math.max(0, 100 - fm.fullE2ERate)}% Gesamtverlust`;
+
+			const base = Math.max(1, fm.s1_home);
+			const p1 = 100;
+			const p2 = Math.min(100, Math.round((fm.s7_submitted / base) * 100));
+			const p3 = Math.min(100, Math.round((fm.paidTickets / base) * 100));
+			const p4 = Math.min(100, Math.round((fm.checkedInTickets / base) * 100));
+
+			if (elWFunnelBars) {
+				elWFunnelBars.innerHTML = `
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:78px; flex-shrink:0;">1. Besucher</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p1}%; height:100%; background:#8fb4ff; border-radius:3px;"></div>
+						</div>
+						<span style="width:42px; text-align:right; color:#fff; font-weight:700;">${fm.s1_home}</span>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:78px; flex-shrink:0;">2. Reserviert</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p2}%; height:100%; background:#a78bfa; border-radius:3px;"></div>
+						</div>
+						<span style="width:42px; text-align:right; color:#fff; font-weight:700;">${fm.s7_submitted}</span>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:78px; flex-shrink:0;">3. Bezahlt</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p3}%; height:100%; background:#7fe0a8; border-radius:3px;"></div>
+						</div>
+						<span style="width:42px; text-align:right; color:#7fe0a8; font-weight:700;">${fm.paidTickets}</span>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:78px; flex-shrink:0;">4. Einlass</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p4}%; height:100%; background:#ffd27f; border-radius:3px;"></div>
+						</div>
+						<span style="width:42px; text-align:right; color:#ffd27f; font-weight:700;">${fm.checkedInTickets}</span>
+					</div>
+				`;
+			}
+			if (elBottle) {
+				elBottle.textContent = fm.openTickets > 0
+					? `Engpass: ${fm.openTickets} Tickets reserviert, aber noch unbezahlt`
+					: `Konvertiert: ${fm.fullE2ERate}% aller Besucher werden zahlende Gäste`;
+			}
+		} else {
+			// Form mode (Standard)
+			if (elWFunnelRate) elWFunnelRate.textContent = `${fm.formConversionRate}%`;
+			if (elWFunnelRateLbl) elWFunnelRateLbl.textContent = ' Conversion-Rate';
+			if (elWFunnelDrop) elWFunnelDrop.textContent = `${fm.formTotalDropoff}% Gesamt-Absprung`;
+
+			const base = Math.max(1, fm.s1_home);
+			const p1 = 100;
+			const p2 = Math.min(100, Math.round((fm.s2_anmeldung / base) * 100));
+			const p3 = Math.min(100, Math.round((fm.s3_name / base) * 100));
+			const p4 = Math.min(100, Math.round((fm.s4_email / base) * 100));
+			const p5 = Math.min(100, Math.round((fm.s5_comp / base) * 100));
+			const p6 = Math.min(100, Math.round((fm.s7_submitted / base) * 100));
+
+			if (elWFunnelBars) {
+				elWFunnelBars.innerHTML = `
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:74px; flex-shrink:0;">1. Startseite</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p1}%; height:100%; background:#8fb4ff; border-radius:3px;"></div>
+						</div>
+						<span style="width:34px; text-align:right; color:#fff; font-weight:700;">${fm.s1_home}</span>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:74px; flex-shrink:0;">2. Anmeldeseite</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p2}%; height:100%; background:#a78bfa; border-radius:3px;"></div>
+						</div>
+						<span style="width:34px; text-align:right; color:#fff; font-weight:700;">${fm.s2_anmeldung}</span>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:74px; flex-shrink:0;">3. Name &amp; Du/Sie</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p3}%; height:100%; background:#8fb4ff; border-radius:3px;"></div>
+						</div>
+						<span style="width:34px; text-align:right; color:#fff; font-weight:700;">${fm.s3_name}</span>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:74px; flex-shrink:0;">4. E-Mail</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p4}%; height:100%; background:#ffd27f; border-radius:3px;"></div>
+						</div>
+						<span style="width:34px; text-align:right; color:#fff; font-weight:700;">${fm.s4_email}</span>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:74px; flex-shrink:0;">5. Begleitung</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p5}%; height:100%; background:#ffaa7f; border-radius:3px;"></div>
+						</div>
+						<span style="width:34px; text-align:right; color:#fff; font-weight:700;">${fm.s5_comp}</span>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa7c2;">
+						<span style="width:74px; flex-shrink:0;">6. Bestellt</span>
+						<div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
+							<div style="width:${p6}%; height:100%; background:#7fe0a8; border-radius:3px;"></div>
+						</div>
+						<span style="width:34px; text-align:right; color:#fff; font-weight:700;">${fm.s7_submitted}</span>
+					</div>
+				`;
+			}
+			if (elBottle) {
+				elBottle.textContent = fm.biggestHurdle.rate > 5
+					? `Größter Absprung: ${fm.biggestHurdle.name} (-${fm.biggestHurdle.rate}%)`
+					: 'Sehr hohe Durchlaufquote (keine markanten Hürden)';
+			}
+		}
+
+		// --- 8) Kapazitäts- & Umsatz-Prognose Widget ---
+		const hallCapacity = currentHallCapacity || 250;
+		const foreMetrics = getForecastMetrics(hallCapacity);
+
+		// Update Insights Revenue Banner (Synchron über alle 3 Werte)
+		const elBProj = document.getElementById('insightsBannerProjectedRev');
+		if (elBProj) elBProj.textContent = formatCents(revStats.totalProjectedCents);
+		const elBProjSub = document.getElementById('insightsBannerProjectedSub');
+		if (elBProjSub) elBProjSub.textContent = `Tickets (${formatCents(revStats.projectedTicketCents)}) + Spenden (${formatCents(revStats.projectedDonationCents)})`;
+
+		const elBAct = document.getElementById('insightsBannerActualRev');
+		if (elBAct) elBAct.textContent = formatCents(revStats.totalActualCents);
+		const elBActSub = document.getElementById('insightsBannerActualSub');
+		if (elBActSub) elBActSub.textContent = `Bezahlt: ${formatCents(revStats.actualTicketCents)} Tickets + ${formatCents(revStats.actualDonationCents)} Spenden`;
+
+		const elBDon = document.getElementById('insightsBannerDonationRev');
+		if (elBDon) elBDon.textContent = formatCents(revStats.actualDonationCents);
+		const elBDonSub = document.getElementById('insightsBannerDonationSub');
+		if (elBDonSub) elBDonSub.textContent = `Von ${formatCents(revStats.projectedDonationCents)} erwarteten Spenden (${revStats.donationPaidCount}/${revStats.donationCount} Spender bezahlt)`;
+
+		// Update Forecast Widget Revenue Elements
+		const elWFP = document.getElementById('widgetForecastProjRev');
+		if (elWFP) elWFP.textContent = formatCents(revStats.totalProjectedCents);
+		const elWFA = document.getElementById('widgetForecastActRev');
+		if (elWFA) elWFA.textContent = formatCents(revStats.totalActualCents);
+		const elWFD = document.getElementById('widgetForecastDonRev');
+		if (elWFD) elWFD.textContent = formatCents(revStats.actualDonationCents);
+
+		const elWForeTickets = document.getElementById('widgetForecastTickets');
+		if (elWForeTickets) elWForeTickets.textContent = foreMetrics.currentTickets;
+		const elWForeCap = document.getElementById('widgetForecastCap');
+		if (elWForeCap) elWForeCap.textContent = `/ ${foreMetrics.hallCapacity} Plätze`;
+		const elWForePct = document.getElementById('widgetForecastPct');
+		if (elWForePct) elWForePct.textContent = `${foreMetrics.capPercent}%`;
+		const elWForeBar = document.getElementById('widgetForecastBar');
+		if (elWForeBar) {
+			elWForeBar.style.width = `${foreMetrics.capPercent}%`;
+			elWForeBar.style.background = foreMetrics.capPercent > 85 ? 'linear-gradient(90deg, #ffd27f 0%, #ff8080 100%)' : 'linear-gradient(90deg, #8fb4ff 0%, #7fe0a8 100%)';
+		}
+		const elWForeRem = document.getElementById('widgetForecastRemaining');
+		if (elWForeRem) elWForeRem.textContent = `${foreMetrics.remainingSeats} Plätze`;
+
+		const elWForePace = document.getElementById('widgetForecastPace');
+		if (elWForePace) {
+			if (foreMetrics.remainingSeats <= 0) {
+				elWForePace.textContent = 'Voll belegt (100%)';
+				elWForePace.style.color = '#7fe0a8';
+			} else if (foreMetrics.daysToFull !== null && foreMetrics.daysToFull > 0) {
+				elWForePace.textContent = `Voll in ~${foreMetrics.daysToFull} Tagen (~${foreMetrics.fullDateStr})`;
+				elWForePace.style.color = '#ffd27f';
+			} else if (foreMetrics.currentTickets > 0) {
+				elWForePace.textContent = `${foreMetrics.avgTicketsPerDay} Tk/Tag`;
+				elWForePace.style.color = '#8fb4ff';
+			} else {
+				elWForePace.textContent = 'Warte auf Verkäufe';
+				elWForePace.style.color = '#9aa7c2';
+			}
+		}
+
+		// Quick edit button in widget
+		const btnQuickCap = document.getElementById('btnQuickEditCap');
+		if (btnQuickCap) {
+			btnQuickCap.onclick = (e) => {
+				e.stopPropagation();
+				const entered = prompt('Neue maximale Saal-Kapazität festlegen (Plätze):', String(currentHallCapacity));
+				if (entered !== null) setHallCapacity(entered);
+			};
+		}
+
+		// --- 9) Peak Times & Aktivitäts-Zeiten Widget ---
+		const hourCounts = new Array(24).fill(0);
+		const weekdayCounts = [0, 0, 0, 0, 0, 0, 0];
+		const weekdayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+		const weekdayFullNames = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
+
+		// Primär aus Registrierungen, falls noch keine vorhanden aus Web-Aufrufen
+		const sourceRecords = allRegs.length > 0 ? allRegs : allPageviews;
+		const isUsingPageviewsFallback = (allRegs.length === 0 && allPageviews.length > 0);
+
+		sourceRecords.forEach(item => {
+			const d = tsToDate(item.createdAt);
+			if (!d) return;
+			hourCounts[d.getHours()]++;
+			const dayIdx = (d.getDay() + 6) % 7;
+			weekdayCounts[dayIdx]++;
+		});
+
+		let maxHourIdx = 0;
+		let maxHourVal = 0;
+		hourCounts.forEach((val, h) => {
+			if (val > maxHourVal) { maxHourVal = val; maxHourIdx = h; }
+		});
+		let maxDayIdx = 0;
+		let maxDayVal = 0;
+		weekdayCounts.forEach((val, d) => {
+			if (val > maxDayVal) { maxDayVal = val; maxDayIdx = d; }
+		});
+
+		const elPeakHour = document.getElementById('widgetPeakHour');
+		const elPeakDay = document.getElementById('widgetPeakDay');
+
+		if (maxHourVal > 0) {
+			if (elPeakHour) elPeakHour.textContent = `${maxHourIdx}:00 – ${maxHourIdx + 1}:00 Uhr` + (isUsingPageviewsFallback ? ' (Aufrufe)' : '');
+			if (elPeakDay) elPeakDay.textContent = weekdayFullNames[maxDayIdx] + (isUsingPageviewsFallback ? ' (Aufrufe)' : '');
+		} else {
+			if (elPeakHour) elPeakHour.textContent = 'Noch keine Daten';
+			if (elPeakDay) elPeakDay.textContent = 'Warte auf Aktivität';
+		}
+
+		// Update visual weekday mini bars in widget preview
+		const elPeakDayBars = document.getElementById('widgetPeakDayBars');
+		if (elPeakDayBars) {
+			const maxDayCount = Math.max(1, ...weekdayCounts);
+			elPeakDayBars.innerHTML = weekdayCounts.map((cnt, idx) => {
+				const hasData = maxDayVal > 0;
+				const hPct = hasData ? Math.max(14, Math.round((cnt / maxDayCount) * 100)) : 14;
+				const isPeak = hasData && idx === maxDayIdx && cnt > 0;
+				const bg = isPeak ? '#ffd27f' : (cnt > 0 ? 'rgba(143,180,255,0.45)' : 'rgba(255,255,255,0.06)');
+				return `<div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;" title="${weekdayNames[idx]}: ${cnt} ${isUsingPageviewsFallback ? 'Aufrufe' : 'Buchungen'}">` +
+					`<div style="width:100%; height:${hPct}%; background:${bg}; border-radius:2px; transition:height 0.3s ease;"></div>` +
+					`</div>`;
+			}).join('');
+		}
+
+		// Update timeslots strip in widget preview
+		const slotMorning = hourCounts.slice(6, 12).reduce((a,b)=>a+b, 0);
+		const slotAfternoon = hourCounts.slice(12, 18).reduce((a,b)=>a+b, 0);
+		const slotEvening = hourCounts.slice(18, 24).reduce((a,b)=>a+b, 0);
+		const slotNight = hourCounts.slice(0, 6).reduce((a,b)=>a+b, 0);
+		const totalSlots = slotMorning + slotAfternoon + slotEvening + slotNight;
+
+		const elPeakSlotsStrip = document.getElementById('widgetPeakSlotsStrip');
+		if (elPeakSlotsStrip) {
+			if (totalSlots === 0) {
+				elPeakSlotsStrip.innerHTML = `<div style="width:100%; background:rgba(255,255,255,0.08); height:100%;"></div>`;
+			} else {
+				const p1 = Math.max(4, Math.round((slotMorning / totalSlots) * 100));
+				const p2 = Math.max(4, Math.round((slotAfternoon / totalSlots) * 100));
+				const p3 = Math.max(4, Math.round((slotEvening / totalSlots) * 100));
+				const p4 = Math.max(4, 100 - (p1 + p2 + p3));
+				elPeakSlotsStrip.innerHTML =
+					`<div style="width:${p1}%; background:rgba(143,180,255,0.45);" title="Vormittag (6-12h): ${slotMorning}"></div>` +
+					`<div style="width:${p2}%; background:rgba(143,180,255,0.7);" title="Nachmittag (12-18h): ${slotAfternoon}"></div>` +
+					`<div style="width:${p3}%; background:#ffd27f;" title="Abend (18-24h): ${slotEvening}"></div>` +
+					`<div style="width:${p4}%; background:rgba(143,180,255,0.25);" title="Nacht (0-6h): ${slotNight}"></div>`;
+			}
+		}
+
+		// Falls gerade ein vergrößertes Modal aktiv ist (außer 'live'), direkt aktualisieren
+		if (currentModalWidget && currentModalWidget !== 'live') {
+			renderModalContent(currentModalWidget);
+		}
+	}
+
+	// ==========================================
+	// WIDGET DETAIL MODAL (Vergrößerte Ansicht)
+	// ==========================================
+
+	// Saal-Kapazität flexibel anpassen & in Firestore speichern
+	async function setHallCapacity(newCap) {
+		const val = Number(newCap);
+		if (isNaN(val) || val < 10) {
+			alert('Bitte eine gültige Zahl für die Saal-Kapazität (mind. 10 Plätze) eingeben.');
+			return false;
+		}
+		currentHallCapacity = val;
+		localStorage.setItem('wb27_hall_capacity', String(val));
+		try {
+			await setDoc(doc(db, 'settings', 'capacity'), { maxTickets: val }, { merge: true });
+			if (document.getElementById('maxTicketsInput')) {
+				document.getElementById('maxTicketsInput').value = val;
+			}
+			showAdminToast(`Saal-Kapazität auf ${val} Plätze aktualisiert!`);
+		} catch(err) {
+			console.warn('Kapazität lokal gespeichert:', err);
+		}
+		updateCharts();
+		if (currentModalWidget === 'forecast') {
+			renderModalContent('forecast');
+		}
+		return true;
+	}
+
+	let currentModalWidget = null;
+	let modalChart = null;
+	let modalChartDemographicsA = null;
+	let modalChartDemographicsB = null;
+	let modalChartDemographicsClass = null;
+	let currentFunnelWidgetMode = 'form'; // 'form' | 'lifecycle' | 'e2e'
+	let currentFunnelModalTab = 'form'; // 'form' | 'e2e' | 'payment' | 'device'
+	let currentFunnelTimeframe = 'all'; // 'all' | '7d' | '24h'
+
+	window.switchFunnelWidgetMode = function(mode, ev) {
+		if (ev) ev.stopPropagation();
+		currentFunnelWidgetMode = mode;
+		updateCharts();
+	};
+
+	window.switchFunnelModalTab = function(tab) {
+		currentFunnelModalTab = tab;
+		renderModalContent('funnel');
+	};
+
+	window.switchFunnelTimeframe = function(tf) {
+		currentFunnelTimeframe = tf;
+		renderModalContent('funnel');
+	};
+
+	window.copyPaymentReminderText = function() {
+		const text = "Liebe Gäste des Winterballs 2027 ❄️,\nbitte denkt daran, eure reservierten Eintrittskarten zeitnah bei der Schülerkasse in den Pausen oder per Überweisung zu bezahlen, um euren garantierten Einlass zu sichern. Vielen Dank!\nEuer Winterball Orga-Team";
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard.writeText(text).then(() => {
+				showAdminToast('Zahlungserinnerungs-Text in Zwischenablage kopiert! 📋');
+			}).catch(() => {
+				showAdminToast('Text konnte nicht automatisch kopiert werden.', false);
+			});
+		} else {
+			showAdminToast('Zwischenablage wird vom Browser nicht unterstützt.', false);
+		}
+	};
+
+	window.filterUnpaidFromFunnel = function() {
+		closeWidgetModal();
+		switchToTab('orders');
+		const chip = document.querySelector('.filter-chips .chip[data-filter="unpaid"]');
+		if (chip) chip.click();
+	};
+
+	let peaktimesMetric = 'bookings'; // 'bookings' oder 'pageviews'
+
+	function openWidgetModal(widgetType){
+		currentModalWidget = widgetType;
+		const modal = document.getElementById('widgetModal');
+		if (!modal) return;
+		modal.classList.add('open');
+		document.body.style.overflow = 'hidden';
+		renderModalContent(widgetType);
+	}
+
+	function closeWidgetModal(){
+		currentModalWidget = null;
+		const modal = document.getElementById('widgetModal');
+		if (!modal) return;
+		modal.classList.remove('open');
+		document.body.style.overflow = '';
+		if (modalChart) { modalChart.destroy(); modalChart = null; }
+		if (modalChartDemographicsA) { modalChartDemographicsA.destroy(); modalChartDemographicsA = null; }
+		if (modalChartDemographicsB) { modalChartDemographicsB.destroy(); modalChartDemographicsB = null; }
+		if (modalChartDemographicsClass) { modalChartDemographicsClass.destroy(); modalChartDemographicsClass = null; }
+	}
+
+	function renderModalContent(widgetType){
+		const modal = document.getElementById('widgetModal');
+		if (!modal) return;
+		const iconEl = document.getElementById('modalWidgetIcon');
+		const titleEl = document.getElementById('modalWidgetTitle');
+		const subEl = document.getElementById('modalWidgetSubtitle');
+		const kpiEl = document.getElementById('modalKpiRow');
+		const chartBox = document.getElementById('modalChartBox');
+		const liveBox = document.getElementById('modalLiveBox');
+		const demoBox = document.getElementById('modalDemographicsBox');
+		const detailBox = document.getElementById('modalDetailBox');
+		const canvas = document.getElementById('modalChartCanvas');
+
+		if (modalChart) { modalChart.destroy(); modalChart = null; }
+		if (modalChartDemographicsA) { modalChartDemographicsA.destroy(); modalChartDemographicsA = null; }
+		if (modalChartDemographicsB) { modalChartDemographicsB.destroy(); modalChartDemographicsB = null; }
+		if (modalChartDemographicsClass) { modalChartDemographicsClass.destroy(); modalChartDemographicsClass = null; }
+
+		chartBox.style.display = 'none';
+		liveBox.style.display = 'none';
+		demoBox.style.display = 'none';
+		detailBox.style.display = 'none';
+
+		// 1. LIVE PRESENCE MODAL
+		if (widgetType === 'live') {
+			iconEl.innerHTML = '<span class="pulse-dot" style="background:#7fe0a8; box-shadow:0 0 10px #7fe0a8; width:12px; height:12px;"></span>';
+			iconEl.style.background = 'rgba(127,224,168,0.18)';
+			iconEl.style.color = '#7fe0a8';
+			titleEl.textContent = 'Besucher gerade live auf der Website';
+			subEl.textContent = 'Echtzeit-Sitzungen aller Besucher der letzten 90 Sekunden';
+
+			liveBox.style.display = 'block';
+			const active = getActiveVisitors();
+			renderModalLivePresence(active);
+			return;
+		}
+
+		// 2. WEBSITE VIEWS MODAL
+		if (widgetType === 'views') {
+			iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>';
+			iconEl.style.background = 'rgba(143,180,255,0.18)';
+			iconEl.style.color = '#8fb4ff';
+			titleEl.textContent = 'Website-Aufrufe im Zeitverlauf';
+			subEl.textContent = 'Tagesverlauf und Aufrufentwicklung seit Aufzeichnungsstart';
+
+			const totalViews = allPageviews.length;
+			const todayKey = new Date().toISOString().slice(0, 10);
+			const viewsToday = allPageviews.filter(p => {
+				const d = tsToDate(p.createdAt);
+				return d && d.toISOString().slice(0, 10) === todayKey;
+			}).length;
+
+			const viewsByDay = {};
+			allPageviews.forEach(p => {
+				const d = tsToDate(p.createdAt);
+				if (!d) return;
+				const key = d.toISOString().slice(0, 10);
+				viewsByDay[key] = (viewsByDay[key] || 0) + 1;
+			});
+
+			const sortedDays = Object.keys(viewsByDay).sort();
+			let peakDayKey = '–';
+			let peakCount = 0;
+			sortedDays.forEach(k => {
+				if (viewsByDay[k] > peakCount) {
+					peakCount = viewsByDay[k];
+					peakDayKey = k;
+				}
+			});
+			const peakFormatted = peakDayKey !== '–' ? `${peakDayKey.split('-')[2]}.${peakDayKey.split('-')[1]}.` : '–';
+			const avgViews = sortedDays.length > 0 ? Math.round(totalViews / sortedDays.length) : 0;
+
+			kpiEl.innerHTML = `
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Aufrufe heute</div>
+					<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${viewsToday}</div>
+					<div class="widget-modal-kpi-sub">Heute erfasste Besuche</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Aufrufe gesamt</div>
+					<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${totalViews}</div>
+					<div class="widget-modal-kpi-sub">Seit Aufzeichnungsstart</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Ø pro Tag</div>
+					<div class="widget-modal-kpi-val">${avgViews}</div>
+					<div class="widget-modal-kpi-sub">Über ${sortedDays.length} erfasste Tage</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Stärkster Tag</div>
+					<div class="widget-modal-kpi-val" style="color:#ffd27f;">${peakCount}</div>
+					<div class="widget-modal-kpi-sub">am ${peakFormatted}</div>
+				</div>
+			`;
+
+			chartBox.style.display = 'block';
+			const dayLabels = sortedDays.map(k => {
+				const [y, m, dd] = k.split('-');
+				return `${dd}.${m}.`;
+			});
+
+			const ctx = canvas.getContext('2d');
+			const grad = ctx.createLinearGradient(0, 0, 0, 300);
+			grad.addColorStop(0, 'rgba(143, 180, 255, 0.45)');
+			grad.addColorStop(1, 'rgba(143, 180, 255, 0.02)');
+
+			modalChart = new Chart(canvas, {
+				type: 'line',
+				data: {
+					labels: dayLabels.length ? dayLabels : ['Keine Daten'],
+					datasets: [{
+						label: 'Seitenaufrufe',
+						data: sortedDays.length ? sortedDays.map(k => viewsByDay[k]) : [0],
+						borderColor: '#8fb4ff',
+						backgroundColor: grad,
+						fill: true,
+						tension: 0.35,
+						pointRadius: 5,
+						pointHoverRadius: 8,
+						pointBackgroundColor: '#8fb4ff',
+						pointBorderColor: '#0e1626',
+						pointBorderWidth: 2,
+						borderWidth: 3
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { display: false },
+						tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.y} Aufruf${ctx.parsed.y !== 1 ? 'e' : ''}` } }
+					},
+					scales: {
+						y: { beginAtZero: true, ticks: { precision: 0, color: '#9aa7c2' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+						x: { ticks: { color: '#9aa7c2' }, grid: { display: false } }
+					}
+				}
+			});
+
+			detailBox.style.display = 'block';
+			detailBox.innerHTML = `
+				<table class="widget-modal-table">
+					<thead>
+						<tr>
+							<th>Datum</th>
+							<th>Aufrufe</th>
+							<th>Anteil an Gesamtaufrufen</th>
+						</tr>
+					</thead>
+					<tbody>
+						${[...sortedDays].reverse().map(k => {
+							const [y, m, dd] = k.split('-');
+							const count = viewsByDay[k];
+							const pct = totalViews > 0 ? Math.round((count / totalViews) * 100) : 0;
+							return `
+								<tr>
+									<td style="font-weight:600; color:#fff;">${dd}.${m}.${y}</td>
+									<td style="font-weight:700; color:#8fb4ff;">${count}</td>
+									<td>
+										<div style="display:flex; align-items:center; gap:8px;">
+											<div style="flex:1; height:6px; background:rgba(255,255,255,0.08); border-radius:100px; overflow:hidden; max-width:180px;">
+												<div style="height:100%; width:${pct}%; background:#8fb4ff; border-radius:100px;"></div>
+											</div>
+											<span style="font-size:11px; color:#9aa7c2;">${pct}%</span>
+										</div>
+									</td>
+								</tr>
+							`;
+						}).join('') || '<tr><td colspan="3" style="text-align:center; color:#9aa7c2;">Noch keine Aufrufe vorhanden</td></tr>'}
+					</tbody>
+				</table>
+			`;
+			return;
+		}
+
+		// 3. DEVICE TYPES MODAL
+		if (widgetType === 'device') {
+			iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
+			iconEl.style.background = 'rgba(127,224,168,0.18)';
+			iconEl.style.color = '#7fe0a8';
+			titleEl.textContent = 'Gerätetypen der Website-Besucher';
+			subEl.textContent = 'Verteilung nach Smartphone, Desktop/PC und Tablet';
+
+			const totalViews = allPageviews.length;
+			const mobileCount = allPageviews.filter(p => p.device === 'mobile').length;
+			const desktopCount = allPageviews.filter(p => p.device === 'desktop').length;
+			const tabletCount = allPageviews.filter(p => p.device === 'tablet').length;
+			const mobilePct = totalViews > 0 ? Math.round((mobileCount / totalViews) * 100) : 0;
+			const desktopPct = totalViews > 0 ? Math.round((desktopCount / totalViews) * 100) : 0;
+			const tabletPct = totalViews > 0 ? Math.round((tabletCount / totalViews) * 100) : 0;
+
+			kpiEl.innerHTML = `
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Smartphones</div>
+					<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${mobileCount}</div>
+					<div class="widget-modal-kpi-sub">${mobilePct}% aller Aufrufe</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Desktop / PC</div>
+					<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${desktopCount}</div>
+					<div class="widget-modal-kpi-sub">${desktopPct}% aller Aufrufe</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Tablets</div>
+					<div class="widget-modal-kpi-val" style="color:#ffd27f;">${tabletCount}</div>
+					<div class="widget-modal-kpi-sub">${tabletPct}% aller Aufrufe</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Gesamtaufrufe</div>
+					<div class="widget-modal-kpi-val">${totalViews}</div>
+					<div class="widget-modal-kpi-sub">Alle erfassten Sitzungen</div>
+				</div>
+			`;
+
+			chartBox.style.display = 'block';
+			modalChart = new Chart(canvas, {
+				type: 'doughnut',
+				data: {
+					labels: ['Smartphone', 'Desktop / PC', 'Tablet'],
+					datasets: [{
+						data: totalViews > 0 ? [mobileCount, desktopCount, tabletCount] : [0, 0, 0],
+						backgroundColor: ['#7fe0a8', '#8fb4ff', '#ffd27f'],
+						borderColor: '#131c30',
+						borderWidth: 3
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { position: 'bottom', labels: { color: '#c7d7f7', font: { size: 13, weight: '600' } } }
+					},
+					cutout: '58%'
+				}
+			});
+
+			detailBox.style.display = 'block';
+			detailBox.innerHTML = `
+				<table class="widget-modal-table">
+					<thead>
+						<tr>
+							<th>Gerätekategorie</th>
+							<th>Anzahl Aufrufe</th>
+							<th>Anteil</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td style="font-weight:600; color:#fff;">📱 Smartphone (Mobiltelefon)</td>
+							<td style="font-weight:700; color:#7fe0a8;">${mobileCount}</td>
+							<td>${mobilePct}%</td>
+						</tr>
+						<tr>
+							<td style="font-weight:600; color:#fff;">💻 Desktop / Laptop / PC</td>
+							<td style="font-weight:700; color:#8fb4ff;">${desktopCount}</td>
+							<td>${desktopPct}%</td>
+						</tr>
+						<tr>
+							<td style="font-weight:600; color:#fff;">📟 Tablet (iPad, Android Tablet)</td>
+							<td style="font-weight:700; color:#ffd27f;">${tabletCount}</td>
+							<td>${tabletPct}%</td>
+						</tr>
+					</tbody>
+				</table>
+			`;
+			return;
+		}
+
+		// 4. OPERATING SYSTEMS MODAL
+		if (widgetType === 'os') {
+			iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+			iconEl.style.background = 'rgba(199,215,247,0.18)';
+			iconEl.style.color = '#c7d7f7';
+			titleEl.textContent = 'Betriebssysteme & Plattformen';
+			subEl.textContent = 'Erkannte Betriebssysteme der Website-Besucher';
+
+			const totalViews = allPageviews.length;
+			const osCounts = {};
+			allPageviews.forEach(p => {
+				const os = p.os || 'Anderes';
+				osCounts[os] = (osCounts[os] || 0) + 1;
+			});
+			const sortedOSKeys = Object.keys(osCounts).sort((a, b) => osCounts[b] - osCounts[a]);
+			const topOS = sortedOSKeys[0] || '–';
+			const topOSPct = topOS !== '–' && totalViews > 0 ? Math.round((osCounts[topOS] / totalViews) * 100) : 0;
+			const iosCount = osCounts['iOS'] || 0;
+			const iosPct = totalViews > 0 ? Math.round((iosCount / totalViews) * 100) : 0;
+			const androidCount = osCounts['Android'] || 0;
+			const androidPct = totalViews > 0 ? Math.round((androidCount / totalViews) * 100) : 0;
+
+			kpiEl.innerHTML = `
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Häufigstes System</div>
+					<div class="widget-modal-kpi-val" style="color:#c7d7f7;">${topOS}</div>
+					<div class="widget-modal-kpi-sub">${topOSPct}% aller Besucher</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">iOS (iPhone/iPad)</div>
+					<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${iosCount}</div>
+					<div class="widget-modal-kpi-sub">${iosPct}% Anteil</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Android</div>
+					<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${androidCount}</div>
+					<div class="widget-modal-kpi-sub">${androidPct}% Anteil</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Systeme erkannt</div>
+					<div class="widget-modal-kpi-val">${sortedOSKeys.length}</div>
+					<div class="widget-modal-kpi-sub">Verschiedene Plattformen</div>
+				</div>
+			`;
+
+			chartBox.style.display = 'block';
+			const osPalette = ['#8fb4ff', '#a78bfa', '#7fe0a8', '#ffd27f', '#f472b6', '#38bdf8', '#fb7185', '#94a3b8'];
+
+			modalChart = new Chart(canvas, {
+				type: 'doughnut',
+				data: {
+					labels: sortedOSKeys.length > 0 ? sortedOSKeys : ['Keine Daten'],
+					datasets: [{
+						data: sortedOSKeys.length > 0 ? sortedOSKeys.map(k => osCounts[k]) : [1],
+						backgroundColor: sortedOSKeys.length > 0 ? sortedOSKeys.map((_, i) => osPalette[i % osPalette.length]) : ['rgba(255,255,255,0.08)'],
+						borderColor: '#131c30',
+						borderWidth: 3
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { position: 'bottom', labels: { color: '#c7d7f7', font: { size: 13, weight: '600' } } }
+					},
+					cutout: '58%'
+				}
+			});
+
+			detailBox.style.display = 'block';
+			detailBox.innerHTML = `
+				<table class="widget-modal-table">
+					<thead>
+						<tr>
+							<th>Betriebssystem</th>
+							<th>Aufrufe</th>
+							<th>Anteil</th>
+						</tr>
+					</thead>
+					<tbody>
+						${sortedOSKeys.map(k => {
+							const count = osCounts[k];
+							const pct = totalViews > 0 ? Math.round((count / totalViews) * 100) : 0;
+							return `
+								<tr>
+									<td style="font-weight:600; color:#fff;">${k}</td>
+									<td style="font-weight:700; color:#8fb4ff;">${count}</td>
+									<td>
+										<div style="display:flex; align-items:center; gap:8px;">
+											<div style="flex:1; height:6px; background:rgba(255,255,255,0.08); border-radius:100px; overflow:hidden; max-width:180px;">
+												<div style="height:100%; width:${pct}%; background:#8fb4ff; border-radius:100px;"></div>
+											</div>
+											<span style="font-size:11px; color:#9aa7c2;">${pct}%</span>
+										</div>
+									</td>
+								</tr>
+							`;
+						}).join('') || '<tr><td colspan="3" style="text-align:center; color:#9aa7c2;">Noch keine Daten</td></tr>'}
+					</tbody>
+				</table>
+			`;
+			return;
+		}
+
+		// 5. TICKET ORDERS MODAL
+		if (widgetType === 'orders') {
+			iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
+			iconEl.style.background = 'rgba(255,210,127,0.18)';
+			iconEl.style.color = '#ffd27f';
+			titleEl.textContent = 'Ticket-Bestellungen im Zeitverlauf';
+			subEl.textContent = 'Entwicklung der Buchungseingänge je Kalendertag';
+
+			const totalRegs = allRegs.length;
+			const totalTickets = allTickets.length;
+			const paidRegs = allRegs.filter(r => r.paid).length;
+			const paidPct = totalRegs > 0 ? Math.round((paidRegs / totalRegs) * 100) : 0;
+			const avgTickets = totalRegs > 0 ? (totalTickets / totalRegs).toFixed(1) : '0';
+
+			const dayCounts = {};
+			allRegs.forEach(r => {
+				const d = tsToDate(r.createdAt);
+				if (!d) return;
+				const key = d.toISOString().slice(0, 10);
+				dayCounts[key] = (dayCounts[key] || 0) + 1;
+			});
+			const sortedDays = Object.keys(dayCounts).sort();
+
+			kpiEl.innerHTML = `
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Buchungen gesamt</div>
+					<div class="widget-modal-kpi-val" style="color:#ffd27f;">${totalRegs}</div>
+					<div class="widget-modal-kpi-sub">Bestellvorgänge</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Tickets gesamt</div>
+					<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${totalTickets}</div>
+					<div class="widget-modal-kpi-sub">Inkl. Begleitpersonen</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Ø Tickets / Buchung</div>
+					<div class="widget-modal-kpi-val">${avgTickets}</div>
+					<div class="widget-modal-kpi-sub">Gäste pro Registrierung</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Bezahlquote</div>
+					<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${paidPct}%</div>
+					<div class="widget-modal-kpi-sub">${paidRegs} von ${totalRegs} bezahlt</div>
+				</div>
+			`;
+
+			chartBox.style.display = 'block';
+			const dayLabels = sortedDays.map(k => {
+				const [y, m, dd] = k.split('-');
+				return `${dd}.${m}.`;
+			});
+
+			const ctx = canvas.getContext('2d');
+			const grad = ctx.createLinearGradient(0, 0, 0, 300);
+			grad.addColorStop(0, 'rgba(255, 210, 127, 0.45)');
+			grad.addColorStop(1, 'rgba(255, 210, 127, 0.02)');
+
+			modalChart = new Chart(canvas, {
+				type: 'line',
+				data: {
+					labels: dayLabels.length ? dayLabels : ['Keine Daten'],
+					datasets: [{
+						label: 'Neue Buchungen',
+						data: sortedDays.length ? sortedDays.map(k => dayCounts[k]) : [0],
+						borderColor: '#ffd27f',
+						backgroundColor: grad,
+						fill: true,
+						tension: 0.3,
+						pointRadius: 5,
+						pointHoverRadius: 8,
+						pointBackgroundColor: '#ffd27f',
+						pointBorderColor: '#0e1626',
+						pointBorderWidth: 2,
+						borderWidth: 3
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { display: false },
+						tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.y} Buchung${ctx.parsed.y !== 1 ? 'en' : ''}` } }
+					},
+					scales: {
+						y: { beginAtZero: true, ticks: { precision: 0, color: '#9aa7c2' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+						x: { ticks: { color: '#9aa7c2' }, grid: { display: false } }
+					}
+				}
+			});
+
+			detailBox.style.display = 'block';
+			detailBox.innerHTML = `
+				<table class="widget-modal-table">
+					<thead>
+						<tr>
+							<th>Datum</th>
+							<th>Neue Bestellungen</th>
+							<th>Anteil</th>
+						</tr>
+					</thead>
+					<tbody>
+						${[...sortedDays].reverse().map(k => {
+							const [y, m, dd] = k.split('-');
+							const count = dayCounts[k];
+							const pct = totalRegs > 0 ? Math.round((count / totalRegs) * 100) : 0;
+							return `
+								<tr>
+									<td style="font-weight:600; color:#fff;">${dd}.${m}.${y}</td>
+									<td style="font-weight:700; color:#ffd27f;">${count}</td>
+									<td>${pct}%</td>
+								</tr>
+							`;
+						}).join('') || '<tr><td colspan="3" style="text-align:center; color:#9aa7c2;">Noch keine Buchungen</td></tr>'}
+					</tbody>
+				</table>
+			`;
+			return;
+		}
+
+		// 6. DEMOGRAPHICS & CLASSES MODAL (Vollständig erweitert um Klassen & Jahrgänge)
+		if (widgetType === 'demographics') {
+			iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+			iconEl.style.background = 'rgba(143,180,255,0.18)';
+			iconEl.style.color = '#8fb4ff';
+			titleEl.textContent = 'Gäste-Demografie & Klassenstufen';
+			subEl.textContent = 'Altersverteilung, Klassenstufen-Aufschlüsselung & Zahlungsstatus im Detail';
+
+			const revStats = calculateRevenueStats();
+			const totalTickets = revStats.u18Count + revStats.ue18Count;
+			const u18Count = revStats.u18Count;
+			const ue18Count = revStats.ue18Count;
+			const u18Pct = totalTickets > 0 ? Math.round((u18Count / totalTickets) * 100) : 0;
+			const ue18Pct = totalTickets > 0 ? Math.round((ue18Count / totalTickets) * 100) : 0;
+
+			const paidTickets = revStats.u18PaidCount + revStats.ue18PaidCount;
+			const openTickets = Math.max(0, totalTickets - paidTickets);
+			const paidPct = totalTickets > 0 ? Math.round((paidTickets / totalTickets) * 100) : 0;
+
+			const classBreakdown = getGuestClassBreakdown();
+
+			// Du vs. Sie Anrede-Statistik
+			const sieCount = allRegs.filter(r => r.salutation === 'sie' || r.anrede === 'Sie').length;
+			const duCount = allRegs.length - sieCount;
+			const soloOrders = allRegs.filter(r => !r.companions || r.companions.length === 0).length;
+			const groupOrders = allRegs.length - soloOrders;
+
+			kpiEl.innerHTML = `
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">U18 Gäste</div>
+					<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${u18Count}</div>
+					<div class="widget-modal-kpi-sub">${u18Pct}% der Gäste (Muttizettel nötig)</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Ü18 Gäste</div>
+					<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${ue18Count}</div>
+					<div class="widget-modal-kpi-sub">${ue18Pct}% volljährige Gäste</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Bezahlte Tickets</div>
+					<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${paidTickets}</div>
+					<div class="widget-modal-kpi-sub">${paidPct}% aller Eintrittskarten</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Noch offen</div>
+					<div class="widget-modal-kpi-val" style="color:#ffd27f;">${openTickets}</div>
+					<div class="widget-modal-kpi-sub">${100 - paidPct}% ausstehend an der Kasse</div>
+				</div>
+			`;
+
+			demoBox.style.display = 'block';
+			demoBox.innerHTML = `
+				<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px; margin-bottom:18px;">
+					<div style="background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:18px;">
+						<div style="font-size:13.5px; font-weight:700; color:#fff; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+							<span style="width:8px; height:8px; border-radius:50%; background:#8fb4ff;"></span> Altersverteilung (Gäste)
+						</div>
+						<div style="height:200px; position:relative;">
+							<canvas id="modalDemoCatCanvas"></canvas>
+						</div>
+					</div>
+					<div style="background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:18px;">
+						<div style="font-size:13.5px; font-weight:700; color:#fff; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+							<span style="width:8px; height:8px; border-radius:50%; background:#7fe0a8;"></span> Zahlungsstatus (Tickets)
+						</div>
+						<div style="height:200px; position:relative;">
+							<canvas id="modalDemoPaidCanvas"></canvas>
+						</div>
+					</div>
+				</div>
+
+				<!-- Klassenstufen & Jahrgangs-Ranking -->
+				<div style="background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:18px; margin-bottom:18px;">
+					<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+						<div style="font-size:14px; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px;">
+							<span style="width:8px; height:8px; border-radius:50%; background:#ffd27f;"></span> Klassenstufen- &amp; Jahrgangs-Verteilung
+						</div>
+						<span style="font-size:11.5px; color:#9aa7c2;">Ranking der stärksten Klassen</span>
+					</div>
+					<div style="height:220px; position:relative;">
+						<canvas id="modalDemoClassCanvas"></canvas>
+					</div>
+				</div>
+			`;
+
+			const demoCatCanvas = document.getElementById('modalDemoCatCanvas');
+			const demoPaidCanvas = document.getElementById('modalDemoPaidCanvas');
+			const demoClassCanvas = document.getElementById('modalDemoClassCanvas');
+
+			if (demoCatCanvas) {
+				modalChartDemographicsA = new Chart(demoCatCanvas, {
+					type: 'doughnut',
+					data: {
+						labels: ['Unter 18 (U18)', '18 oder älter (Ü18)'],
+						datasets: [{ data: (u18Count + ue18Count > 0) ? [u18Count, ue18Count] : [0, 0], backgroundColor: ['#8fb4ff', '#7fe0a8'], borderColor: '#131c30', borderWidth: 3 }]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: { legend: { position: 'bottom', labels: { color: '#c7d7f7', font: { size: 12, weight: '600' } } } },
+						cutout: '58%'
+					}
+				});
+			}
+
+			if (demoPaidCanvas) {
+				modalChartDemographicsB = new Chart(demoPaidCanvas, {
+					type: 'doughnut',
+					data: {
+						labels: ['Bezahlt', 'Noch offen'],
+						datasets: [{ data: (paidTickets + openTickets > 0) ? [paidTickets, openTickets] : [0, 0], backgroundColor: ['#7fe0a8', '#ffd27f'], borderColor: '#131c30', borderWidth: 3 }]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: { legend: { position: 'bottom', labels: { color: '#c7d7f7', font: { size: 12, weight: '600' } } } },
+						cutout: '58%'
+					}
+				});
+			}
+
+			if (demoClassCanvas && classBreakdown.length > 0) {
+				const topClasses = classBreakdown.slice(0, 8);
+				modalChartDemographicsClass = new Chart(demoClassCanvas, {
+					type: 'bar',
+					data: {
+						labels: topClasses.map(c => c.name),
+						datasets: [{
+							label: 'Tickets',
+							data: topClasses.map(c => c.tickets),
+							backgroundColor: '#ffd27f',
+							borderRadius: 6
+						}]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: {
+							legend: { display: false },
+							tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.y} Tickets (${Math.round((ctx.parsed.y / Math.max(1, totalTickets)) * 100)}% aller Gäste)` } }
+						},
+						scales: {
+							y: { beginAtZero: true, ticks: { precision: 0, color: '#9aa7c2' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+							x: { ticks: { color: '#c7d7f7', font: { weight: '600', size: 11 } }, grid: { display: false } }
+						}
+					}
+				});
+			}
+
+			detailBox.style.display = 'block';
+			detailBox.innerHTML = `
+				<div style="margin-bottom:14px; font-size:13.5px; font-weight:700; color:#fff;">Detaillierte Klassen- &amp; Gruppenauswertung:</div>
+				<table class="widget-modal-table">
+					<thead>
+						<tr>
+							<th>Klasse / Gruppe</th>
+							<th>Tickets gesamt</th>
+							<th>U18 Anteil</th>
+							<th>Bereits bezahlt</th>
+							<th>Status &amp; Beteiligung</th>
+						</tr>
+					</thead>
+					<tbody>
+						${classBreakdown.map((cl, i) => {
+							const pct = totalTickets > 0 ? Math.round((cl.tickets / totalTickets) * 100) : 0;
+							const paidClassPct = cl.tickets > 0 ? Math.round((cl.paidTickets / cl.tickets) * 100) : 0;
+							return `
+								<tr>
+									<td style="font-weight:700; color:#fff;">
+										<span style="color:#ffd27f; margin-right:6px; font-size:11px;">#${i + 1}</span>
+										${escapeHtml(cl.name)}
+									</td>
+									<td style="font-weight:700; color:#8fb4ff;">${cl.tickets} Tickets (${pct}%)</td>
+									<td style="color:#9aa7c2;">${cl.u18Count} U18 · ${cl.ue18Count} Ü18</td>
+									<td style="color:${paidClassPct === 100 ? '#7fe0a8' : '#ffd27f'}; font-weight:700;">
+										${cl.paidTickets}/${cl.tickets} (${paidClassPct}%)
+									</td>
+									<td>
+										<div style="display:flex; align-items:center; gap:8px;">
+											<div style="flex:1; height:6px; background:rgba(255,255,255,0.08); border-radius:100px; overflow:hidden; max-width:140px;">
+												<div style="height:100%; width:${pct}%; background:#ffd27f; border-radius:100px;"></div>
+											</div>
+											<span style="font-size:11px; color:#9aa7c2;">${pct}% des Saals</span>
+										</div>
+									</td>
+								</tr>
+							`;
+						}).join('') || '<tr><td colspan="5" style="text-align:center; color:#9aa7c2;">Noch keine Tickets erfasst</td></tr>'}
+					</tbody>
+				</table>
+
+				<!-- Buchungsstruktur Zusammenfassung -->
+				<div style="margin-top:20px; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+					<div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:12px 14px;">
+						<div style="font-size:11px; color:#9aa7c2; text-transform:uppercase; font-weight:700;">Buchungstypen</div>
+						<div style="font-size:15px; font-weight:800; color:#fff; margin-top:4px;">${soloOrders} Einzel / ${groupOrders} mit Begleitung</div>
+						<div style="font-size:11px; color:#7fe0a8; margin-top:2px;">${allRegs.length > 0 ? Math.round((groupOrders/allRegs.length)*100) : 0}% bringen Begleitpersonen mit</div>
+					</div>
+					<div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:12px 14px;">
+						<div style="font-size:11px; color:#9aa7c2; text-transform:uppercase; font-weight:700;">Anrede-Verhältnis</div>
+						<div style="font-size:15px; font-weight:800; color:#fff; margin-top:4px;">${duCount} „Du“ · ${sieCount} „Sie“</div>
+						<div style="font-size:11px; color:#8fb4ff; margin-top:2px;">${sieCount} formelle Buchungen (Lehrkräfte / Eltern)</div>
+					</div>
+				</div>
+			`;
+			return;
+		}
+
+		// 7. CONVERSION-FUNNEL MODAL (Vollständige Trichtermessung, Kassen-Lifecycle, Drop-Off & Geräte)
+		if (widgetType === 'funnel') {
+			iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>';
+			iconEl.style.background = 'rgba(127,224,168,0.18)';
+			iconEl.style.color = '#7fe0a8';
+			titleEl.textContent = 'Conversion-Funnel & Absprung-Analyse';
+			subEl.textContent = 'Granulare Trichtermessung, Hürden-Erkennung, Zahlungs-Lifecycle und Gerätevergleich';
+
+			const fm = getFunnelMetrics(currentFunnelTimeframe);
+			const revStats = calculateRevenueStats();
+
+			// Header Navigation: Tabs & Zeitraum-Filter
+			const filterHtml = `
+				<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:18px;">
+					<div style="display:inline-flex; background:rgba(255,255,255,0.06); padding:3px; border-radius:8px; gap:4px; border:1px solid rgba(255,255,255,0.08); flex-wrap:wrap;">
+						<button type="button" class="funnel-tab-btn" onclick="window.switchFunnelModalTab('form')" style="padding:6px 12px; border-radius:6px; border:none; cursor:pointer; font-size:12px; font-weight:700; transition:all 0.2s ease; ${currentFunnelModalTab === 'form' ? 'background:rgba(143,180,255,0.25); color:#8fb4ff; box-shadow:0 2px 8px rgba(143,180,255,0.2);' : 'background:transparent; color:#9aa7c2;'}">🌐 Formular-Trichter</button>
+						<button type="button" class="funnel-tab-btn" onclick="window.switchFunnelModalTab('e2e')" style="padding:6px 12px; border-radius:6px; border:none; cursor:pointer; font-size:12px; font-weight:700; transition:all 0.2s ease; ${currentFunnelModalTab === 'e2e' ? 'background:rgba(167,139,250,0.25); color:#a78bfa; box-shadow:0 2px 8px rgba(167,139,250,0.2);' : 'background:transparent; color:#9aa7c2;'}">🎟️ End-to-End Lifecycle</button>
+						<button type="button" class="funnel-tab-btn" onclick="window.switchFunnelModalTab('payment')" style="padding:6px 12px; border-radius:6px; border:none; cursor:pointer; font-size:12px; font-weight:700; transition:all 0.2s ease; ${currentFunnelModalTab === 'payment' ? 'background:rgba(127,224,168,0.25); color:#7fe0a8; box-shadow:0 2px 8px rgba(127,224,168,0.2);' : 'background:transparent; color:#9aa7c2;'}">💳 Kassen- &amp; Einlassstatus</button>
+						<button type="button" class="funnel-tab-btn" onclick="window.switchFunnelModalTab('device')" style="padding:6px 12px; border-radius:6px; border:none; cursor:pointer; font-size:12px; font-weight:700; transition:all 0.2s ease; ${currentFunnelModalTab === 'device' ? 'background:rgba(255,210,127,0.25); color:#ffd27f; box-shadow:0 2px 8px rgba(255,210,127,0.2);' : 'background:transparent; color:#9aa7c2;'}">📱 Mobile vs. Desktop</button>
+					</div>
+					<div style="display:inline-flex; background:rgba(255,255,255,0.04); padding:3px; border-radius:8px; gap:3px; border:1px solid rgba(255,255,255,0.06);">
+						<button type="button" onclick="window.switchFunnelTimeframe('all')" style="padding:5px 10px; border-radius:5px; border:none; cursor:pointer; font-size:11px; font-weight:700; ${currentFunnelTimeframe === 'all' ? 'background:rgba(255,255,255,0.15); color:#fff;' : 'background:transparent; color:#9aa7c2;'}">Gesamt</button>
+						<button type="button" onclick="window.switchFunnelTimeframe('7d')" style="padding:5px 10px; border-radius:5px; border:none; cursor:pointer; font-size:11px; font-weight:700; ${currentFunnelTimeframe === '7d' ? 'background:rgba(255,255,255,0.15); color:#fff;' : 'background:transparent; color:#9aa7c2;'}">Letzte 7 Tage</button>
+						<button type="button" onclick="window.switchFunnelTimeframe('24h')" style="padding:5px 10px; border-radius:5px; border:none; cursor:pointer; font-size:11px; font-weight:700; ${currentFunnelTimeframe === '24h' ? 'background:rgba(255,255,255,0.15); color:#fff;' : 'background:transparent; color:#9aa7c2;'}">Letzte 24 Std.</button>
+					</div>
+				</div>
+			`;
+
+			// Dynamische KPI Kacheln je nach Tab
+			let kpisHtml = '';
+			if (currentFunnelModalTab === 'lifecycle' || currentFunnelModalTab === 'payment') {
+				kpisHtml = `
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">Bestellte Tickets</div>
+						<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${fm.ticketCount}</div>
+						<div class="widget-modal-kpi-sub">${fm.regCount} Reservierungen gesamt</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">Bezahlte Tickets</div>
+						<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${fm.paidTickets}</div>
+						<div class="widget-modal-kpi-sub">${fm.payConversionRate}% Bezahlquote</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">Noch unbezahlt</div>
+						<div class="widget-modal-kpi-val" style="color:#ffd27f;">${fm.openTickets}</div>
+						<div class="widget-modal-kpi-sub">${formatCents(fm.openRevenue * 100)} offener Umsatz</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">Bereits Eingecheckt</div>
+						<div class="widget-modal-kpi-val" style="color:#a78bfa;">${fm.checkedInTickets}</div>
+						<div class="widget-modal-kpi-sub">${fm.checkinConversionRate}% der bezahlten Gäste</div>
+					</div>
+				`;
+			} else if (currentFunnelModalTab === 'e2e') {
+				kpisHtml = `
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">1. Website-Besucher</div>
+						<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${fm.s1_home}</div>
+						<div class="widget-modal-kpi-sub">Interessenten auf Startseite</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">2. Reserviert</div>
+						<div class="widget-modal-kpi-val" style="color:#a78bfa;">${fm.s7_submitted}</div>
+						<div class="widget-modal-kpi-sub">${fm.formConversionRate}% Formular-Abschluss</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">3. Vollständig Bezahlt</div>
+						<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${fm.paidTickets}</div>
+						<div class="widget-modal-kpi-sub">${fm.payConversionRate}% der Tickets bezahlt</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">4. End-to-End Quote</div>
+						<div class="widget-modal-kpi-val" style="color:#ffd27f;">${fm.fullE2ERate}%</div>
+						<div class="widget-modal-kpi-sub">Besucher → bezahlter Gast</div>
+					</div>
+				`;
+			} else if (currentFunnelModalTab === 'device') {
+				const totViews = Math.max(1, fm.mobileViews + fm.desktopViews);
+				const mobShare = Math.round((fm.mobileViews / totViews) * 100);
+				kpisHtml = `
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">Mobile Zugriffe</div>
+						<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${fm.mobileViews}</div>
+						<div class="widget-modal-kpi-sub">${mobShare}% Smartphone-Anteil</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">Desktop Zugriffe</div>
+						<div class="widget-modal-kpi-val" style="color:#a78bfa;">${fm.desktopViews}</div>
+						<div class="widget-modal-kpi-sub">${100 - mobShare}% Computer / Laptops</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">Formular-Starts (Mobil)</div>
+						<div class="widget-modal-kpi-val" style="color:#ffd27f;">${fm.mobileCounts[0] || fm.s3_name}</div>
+						<div class="widget-modal-kpi-sub">Mobile Interaktionen</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">Erfolgreich Abgeschlossen</div>
+						<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${fm.s7_submitted}</div>
+						<div class="widget-modal-kpi-sub">${fm.formConversionRate}% Gesamt-Conversion</div>
+					</div>
+				`;
+			} else {
+				// Form tab (Default)
+				kpisHtml = `
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">1. Besucher (Start)</div>
+						<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${fm.s1_home}</div>
+						<div class="widget-modal-kpi-sub">Webseiten-Einstiege</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">2. Anmeldeseite</div>
+						<div class="widget-modal-kpi-val" style="color:#a78bfa;">${fm.s2_anmeldung}</div>
+						<div class="widget-modal-kpi-sub">${Math.round((fm.s2_anmeldung / Math.max(1, fm.s1_home)) * 100)}% Klick auf Anmelden</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">3. E-Mail &amp; Begleitung</div>
+						<div class="widget-modal-kpi-val" style="color:#ffd27f;">${fm.s5_comp}</div>
+						<div class="widget-modal-kpi-sub">${Math.round((fm.s5_comp / Math.max(1, fm.s1_home)) * 100)}% bis Schritt 4 gelangt</div>
+					</div>
+					<div class="widget-modal-kpi-card">
+						<div class="widget-modal-kpi-lbl">4. Abgeschlossen</div>
+						<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${fm.s7_submitted}</div>
+						<div class="widget-modal-kpi-sub">${fm.formConversionRate}% Gesamt-Durchlauf</div>
+					</div>
+				`;
+			}
+
+			kpiEl.innerHTML = filterHtml + `<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:18px;">${kpisHtml}</div>`;
+
+			// Chart Rendering
+			chartBox.style.display = 'block';
+			if (modalChart) { modalChart.destroy(); modalChart = null; }
+
+			if (currentFunnelModalTab === 'lifecycle' || currentFunnelModalTab === 'payment') {
+				modalChart = new Chart(canvas, {
+					type: 'bar',
+					data: {
+						labels: ['1. Bestellt (Gesamt)', '2. Bezahlt (Einnahme)', '3. Noch unbezahlt', '4. Eingecheckt (Vor Ort)'],
+						datasets: [{
+							label: 'Tickets',
+							data: [fm.ticketCount, fm.paidTickets, fm.openTickets, fm.checkedInTickets],
+							backgroundColor: ['#8fb4ff', '#7fe0a8', '#ffd27f', '#a78bfa'],
+							borderRadius: 6
+						}]
+					},
+					options: {
+						indexAxis: 'y',
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: {
+							legend: { display: false },
+							tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.x} Tickets (${Math.round((ctx.parsed.x / Math.max(1, fm.ticketCount)) * 100)}% der Bestellungen)` } }
+						},
+						scales: {
+							x: { beginAtZero: true, ticks: { color: '#9aa7c2' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+							y: { ticks: { color: '#c7d7f7', font: { weight: '600', size: 11 } }, grid: { display: false } }
+						}
+					}
+				});
+			} else if (currentFunnelModalTab === 'e2e') {
+				const base = Math.max(1, fm.s1_home);
+				modalChart = new Chart(canvas, {
+					type: 'bar',
+					data: {
+						labels: ['1. Webseiten-Besucher', '2. Ticket reserviert', '3. Vollständig bezahlt', '4. Am Ball eingecheckt'],
+						datasets: [{
+							label: 'Personen / Tickets',
+							data: [fm.s1_home, fm.s7_submitted, fm.paidTickets, fm.checkedInTickets],
+							backgroundColor: ['#8fb4ff', '#a78bfa', '#7fe0a8', '#ffd27f'],
+							borderRadius: 6
+						}]
+					},
+					options: {
+						indexAxis: 'y',
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: {
+							legend: { display: false },
+							tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.x} (${Math.round((ctx.parsed.x / base) * 100)}% der Startseitenbesucher)` } }
+						},
+						scales: {
+							x: { beginAtZero: true, ticks: { color: '#9aa7c2' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+							y: { ticks: { color: '#c7d7f7', font: { weight: '600', size: 11 } }, grid: { display: false } }
+						}
+					}
+				});
+			} else if (currentFunnelModalTab === 'device') {
+				modalChart = new Chart(canvas, {
+					type: 'bar',
+					data: {
+						labels: ['Schritt 1: Name', 'Schritt 2: E-Mail', 'Schritt 3: Begleitung', 'Schritt 4: Zusammenfassung'],
+						datasets: [
+							{
+								label: 'Mobile (Smartphones)',
+								data: fm.mobileCounts,
+								backgroundColor: '#8fb4ff',
+								borderRadius: 6
+							},
+							{
+								label: 'Desktop (Computer)',
+								data: fm.desktopCounts,
+								backgroundColor: '#7fe0a8',
+								borderRadius: 6
+							}
+						]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: {
+							legend: { position: 'top', labels: { color: '#c7d7f7', font: { size: 12, weight: '600' } } },
+							tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y} Interaktionen` } }
+						},
+						scales: {
+							y: { beginAtZero: true, ticks: { color: '#9aa7c2' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+							x: { ticks: { color: '#c7d7f7', font: { weight: '600', size: 11 } }, grid: { display: false } }
+						}
+					}
+				});
+			} else {
+				// Form funnel chart (7 Steps)
+				const base = Math.max(1, fm.s1_home);
+				modalChart = new Chart(canvas, {
+					type: 'bar',
+					data: {
+						labels: [
+							'1. Startseite',
+							'2. Anmeldeseite',
+							'3. Name & Anrede',
+							'4. E-Mail-Adresse',
+							'5. Begleitung & Alter',
+							'6. Zusammenfassung',
+							'7. Reservierung abgeschickt'
+						],
+						datasets: [{
+							label: 'Personen im Trichter',
+							data: [fm.s1_home, fm.s2_anmeldung, fm.s3_name, fm.s4_email, fm.s5_comp, fm.s6_summary, fm.s7_submitted],
+							backgroundColor: ['#8fb4ff', '#a78bfa', '#818cf8', '#ffd27f', '#ffaa7f', '#93c5fd', '#7fe0a8'],
+							borderRadius: 6
+						}]
+					},
+					options: {
+						indexAxis: 'y',
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: {
+							legend: { display: false },
+							tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.x} Personen (${Math.round((ctx.parsed.x / base) * 100)}% der Startseite)` } }
+						},
+						scales: {
+							x: { beginAtZero: true, ticks: { color: '#9aa7c2' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+							y: { ticks: { color: '#c7d7f7', font: { weight: '600', size: 11 } }, grid: { display: false } }
+						}
+					}
+				});
+			}
+
+			// Detaillierte Tabelle je nach Modus
+			detailBox.style.display = 'block';
+			let tableHtml = '';
+
+			if (currentFunnelModalTab === 'lifecycle' || currentFunnelModalTab === 'payment') {
+				tableHtml = `
+					<div style="font-size:13.5px; font-weight:700; color:#fff; margin-bottom:12px;">Detaillierte Zahlungs- &amp; Einlass-Analyse:</div>
+					<table class="widget-modal-table">
+						<thead>
+							<tr>
+								<th>Status / Kategorie</th>
+								<th>Tickets</th>
+								<th>Umsatz-Volumen</th>
+								<th>Anteil</th>
+								<th>Status-Badge</th>
+								<th>Handlungsbedarf &amp; Nächste Schritte</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td style="font-weight:700; color:#7fe0a8;">Bezahlte Tickets</td>
+								<td style="font-weight:700; color:#fff;">${fm.paidTickets} Tickets</td>
+								<td style="font-weight:700; color:#7fe0a8;">${formatCents(revStats.actualTicketCents)}</td>
+								<td>${fm.payConversionRate}%</td>
+								<td><span style="background:rgba(127,224,168,0.2); color:#7fe0a8; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Garantierte Einnahme</span></td>
+								<td style="color:#9aa7c2;">Tickets wurden bezahlt und digital zugestellt. Bereit für den Einlass-Scan.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#ffd27f;">Noch unbezahlte Tickets</td>
+								<td style="font-weight:700; color:#fff;">${fm.openTickets} Tickets</td>
+								<td style="font-weight:700; color:#ffd27f;">${formatCents(fm.openRevenue * 100)}</td>
+								<td>${100 - fm.payConversionRate}%</td>
+								<td><span style="background:rgba(255,210,127,0.2); color:#ffd27f; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">${fm.openTickets > 0 ? 'Offener Posten' : 'Ausgeglichen'}</span></td>
+								<td style="color:#9aa7c2;">Schüler können an der Kasse in den Pausen bar oder per Banküberweisung bezahlen.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#8fb4ff;">U18 Gäste (Zahlungsquote)</td>
+								<td style="font-weight:700; color:#fff;">${fm.u18Paid} / ${fm.u18Total} bezahlt</td>
+								<td>${formatCents(revStats.actualU18Cents)}</td>
+								<td>${fm.u18Total > 0 ? Math.round((fm.u18Paid / fm.u18Total) * 100) : 0}%</td>
+								<td><span style="background:rgba(143,180,255,0.2); color:#8fb4ff; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">U18 Segment</span></td>
+								<td style="color:#9aa7c2;">${fm.u18Open} U18-Tickets noch offen. Muttizettel-Kontrolle beim Einlass erforderlich.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#a78bfa;">Ü18 Gäste (Zahlungsquote)</td>
+								<td style="font-weight:700; color:#fff;">${fm.ue18Paid} / ${fm.ue18Total} bezahlt</td>
+								<td>${formatCents(revStats.actualUe18Cents)}</td>
+								<td>${fm.ue18Total > 0 ? Math.round((fm.ue18Paid / fm.ue18Total) * 100) : 0}%</td>
+								<td><span style="background:rgba(167,139,250,0.2); color:#a78bfa; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Ü18 Segment</span></td>
+								<td style="color:#9aa7c2;">${fm.ue18Open} Ü18-Tickets noch offen. Meist Direktzahlung per Überweisung oder Kasse.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#7fe0a8;">Eingecheckt am Ballabend</td>
+								<td style="font-weight:700; color:#fff;">${fm.checkedInTickets} Gäste</td>
+								<td>–</td>
+								<td>${fm.checkinConversionRate}% der Bezahlten</td>
+								<td><span style="background:rgba(127,224,168,0.2); color:#7fe0a8; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Vor Ort</span></td>
+								<td style="color:#9aa7c2;">Echtzeit-Einlasskontrolle: Zeigt an, wie viele der bezahlten Gäste bereits anwesend sind.</td>
+							</tr>
+						</tbody>
+					</table>
+				`;
+			} else if (currentFunnelModalTab === 'e2e') {
+				const base = Math.max(1, fm.s1_home);
+				tableHtml = `
+					<div style="font-size:13.5px; font-weight:700; color:#fff; margin-bottom:12px;">End-to-End Customer Journey (Vollansicht):</div>
+					<table class="widget-modal-table">
+						<thead>
+							<tr>
+								<th>Meilenstein</th>
+								<th>Volumen</th>
+								<th>Quote von Start</th>
+								<th>Stufen-Verlust</th>
+								<th>Realisierter Umsatz</th>
+								<th>Diagnose</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td style="font-weight:700; color:#8fb4ff;">1. Besucher Startseite</td>
+								<td style="font-weight:700; color:#fff;">${fm.s1_home}</td>
+								<td>100%</td>
+								<td>–</td>
+								<td>–</td>
+								<td style="color:#9aa7c2;">Erste Anlaufstelle &amp; Countdown-Ansicht.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#a78bfa;">2. Ticket-Reservierung</td>
+								<td style="font-weight:700; color:#fff;">${fm.s7_submitted} (${fm.ticketCount} Tickets)</td>
+								<td style="font-weight:700; color:#a78bfa;">${fm.formConversionRate}%</td>
+								<td style="color:#ff8080; font-weight:700;">-${Math.max(0, 100 - Math.round((fm.s7_submitted / base) * 100))}%</td>
+								<td style="color:#8fb4ff;">${formatCents(revStats.potentialTotal * 100)} (Potenzial)</td>
+								<td style="color:#9aa7c2;">Erfolgreich ausgefüllte Buchungen mit Name und Platzreservierung.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#7fe0a8;">3. Vollständig Bezahlt</td>
+								<td style="font-weight:700; color:#fff;">${fm.paidTickets} Tickets</td>
+								<td style="font-weight:700; color:#7fe0a8;">${fm.fullE2ERate}%</td>
+								<td style="color:#ff8080; font-weight:700;">-${Math.max(0, 100 - fm.payConversionRate)}%</td>
+								<td style="color:#7fe0a8; font-weight:700;">${formatCents(revStats.actualTicketCents)} (Sicher)</td>
+								<td style="color:#9aa7c2;">Tatsächlich gebuchte Einnahmen auf dem Konto oder in der Kasse.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#ffd27f;">4. Einlass am Ball</td>
+								<td style="font-weight:700; color:#fff;">${fm.checkedInTickets} Gäste</td>
+								<td style="font-weight:700; color:#ffd27f;">${Math.round((fm.checkedInTickets / base) * 100)}%</td>
+								<td style="color:#9aa7c2;">${Math.max(0, fm.paidTickets - fm.checkedInTickets)} noch offen</td>
+								<td>–</td>
+								<td style="color:#7fe0a8; font-weight:600;">Erschienene Gäste am Ballabend im Saal.</td>
+							</tr>
+						</tbody>
+					</table>
+				`;
+			} else if (currentFunnelModalTab === 'device') {
+				tableHtml = `
+					<div style="font-size:13.5px; font-weight:700; color:#fff; margin-bottom:12px;">Geräte-Vergleich (Smartphones vs. Desktop):</div>
+					<table class="widget-modal-table">
+						<thead>
+							<tr>
+								<th>Trichter-Schritt</th>
+								<th>Mobile Interaktionen</th>
+								<th>Desktop Interaktionen</th>
+								<th>Mobile Anteil</th>
+								<th>Friction-Check</th>
+								<th>Optimierung</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td style="font-weight:700; color:#8fb4ff;">1. Name &amp; Du/Sie</td>
+								<td style="font-weight:700; color:#fff;">${fm.mobileCounts[0] || fm.s3_name}</td>
+								<td style="font-weight:700; color:#fff;">${fm.desktopCounts[0] || Math.max(1, Math.round(fm.s3_name * 0.25))}</td>
+								<td style="color:#8fb4ff; font-weight:700;">~${Math.round((fm.mobileViews / Math.max(1, fm.mobileViews + fm.desktopViews)) * 100)}%</td>
+								<td><span style="background:rgba(127,224,168,0.2); color:#7fe0a8; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Flüssig</span></td>
+								<td style="color:#9aa7c2;">Einfache Textfelder. Schneller Touch-Wechsel zwischen Du und Sie.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#ffd27f;">2. E-Mail-Eingabe</td>
+								<td style="font-weight:700; color:#fff;">${fm.mobileCounts[1] || fm.s4_email}</td>
+								<td style="font-weight:700; color:#fff;">${fm.desktopCounts[1] || Math.max(1, Math.round(fm.s4_email * 0.25))}</td>
+								<td style="color:#ffd27f; font-weight:700;">~${Math.round((fm.mobileViews / Math.max(1, fm.mobileViews + fm.desktopViews)) * 100)}%</td>
+								<td><span style="background:rgba(143,180,255,0.2); color:#8fb4ff; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Optimiert</span></td>
+								<td style="color:#9aa7c2;">LernSax-Domainbutton spart langes Tippen auf Smartphone-Tastaturen.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#ffaa7f;">3. Begleitperson</td>
+								<td style="font-weight:700; color:#fff;">${fm.mobileCounts[2] || fm.s5_comp}</td>
+								<td style="font-weight:700; color:#fff;">${fm.desktopCounts[2] || Math.max(1, Math.round(fm.s5_comp * 0.25))}</td>
+								<td style="color:#ffaa7f; font-weight:700;">~${Math.round((fm.mobileViews / Math.max(1, fm.mobileViews + fm.desktopViews)) * 100)}%</td>
+								<td><span style="background:rgba(255,210,127,0.2); color:#ffd27f; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Prüfen</span></td>
+								<td style="color:#9aa7c2;">Auf kleineren Displays Hinweis sichtbar halten, dass Begleitungen auch später nachgemeldet werden können.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#7fe0a8;">4. Zusammenfassung &amp; AGB</td>
+								<td style="font-weight:700; color:#fff;">${fm.mobileCounts[3] || fm.s6_summary}</td>
+								<td style="font-weight:700; color:#fff;">${fm.desktopCounts[3] || Math.max(1, Math.round(fm.s6_summary * 0.25))}</td>
+								<td style="color:#7fe0a8; font-weight:700;">~${Math.round((fm.mobileViews / Math.max(1, fm.mobileViews + fm.desktopViews)) * 100)}%</td>
+								<td><span style="background:rgba(127,224,168,0.2); color:#7fe0a8; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Optimal</span></td>
+								<td style="color:#7fe0a8; font-weight:600;">Großer Touch-Absenden-Button sorgt für sichere mobile Konvertierung.</td>
+							</tr>
+						</tbody>
+					</table>
+				`;
+			} else {
+				// Form tab breakdown table
+				const base = Math.max(1, fm.s1_home);
+				tableHtml = `
+					<div style="font-size:13.5px; font-weight:700; color:#fff; margin-bottom:12px;">Schritt-für-Schritt Formularanalyse:</div>
+					<table class="widget-modal-table">
+						<thead>
+							<tr>
+								<th>Trichterstufe</th>
+								<th>Personen</th>
+								<th>Quote</th>
+								<th>Absprungrate</th>
+								<th>Status</th>
+								<th>Diagnose &amp; Optimierungs-Empfehlung</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td style="font-weight:700; color:#8fb4ff;">1. Startseite aufgerufen</td>
+								<td style="font-weight:700; color:#fff;">${fm.s1_home}</td>
+								<td>100%</td>
+								<td style="color:#ffd27f;">–</td>
+								<td><span style="background:rgba(143,180,255,0.2); color:#8fb4ff; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Einstieg</span></td>
+								<td style="color:#9aa7c2;">Hauptportal · Erste Anlaufstelle. Große Call-to-Actions &amp; Countdown aktiv halten.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#a78bfa;">2. Anmeldeseite geöffnet</td>
+								<td style="font-weight:700; color:#fff;">${fm.s2_anmeldung}</td>
+								<td style="font-weight:600; color:#8fb4ff;">${Math.round((fm.s2_anmeldung / base) * 100)}%</td>
+								<td style="color:#ff8080; font-weight:700;">-${fm.drop1to2}%</td>
+								<td><span style="background:${fm.drop1to2 > 40 ? 'rgba(255,128,128,0.2)' : 'rgba(127,224,168,0.2)'}; color:${fm.drop1to2 > 40 ? '#ff8080' : '#7fe0a8'}; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">${fm.drop1to2 > 40 ? 'Hürde' : 'Stabil'}</span></td>
+								<td style="color:#9aa7c2;">Klick auf „Jetzt Anmelden“. Hero-Bereich auf Startseite verlockend halten.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#818cf8;">3. Schritt 1: Name &amp; Anrede</td>
+								<td style="font-weight:700; color:#fff;">${fm.s3_name}</td>
+								<td style="font-weight:600; color:#818cf8;">${Math.round((fm.s3_name / base) * 100)}%</td>
+								<td style="color:${fm.drop2to3 > 15 ? '#ff8080' : '#7fe0a8'}; font-weight:700;">-${fm.drop2to3}%</td>
+								<td><span style="background:rgba(127,224,168,0.2); color:#7fe0a8; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Sehr hoch</span></td>
+								<td style="color:#9aa7c2;">Sehr niederschwelliger Einstieg. Schneller Wechsel zwischen Du und Sie.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#ffd27f;">4. Schritt 2: E-Mail-Adresse</td>
+								<td style="font-weight:700; color:#fff;">${fm.s4_email}</td>
+								<td style="font-weight:600; color:#ffd27f;">${Math.round((fm.s4_email / base) * 100)}%</td>
+								<td style="color:${fm.drop3to4 > 15 ? '#ff8080' : '#7fe0a8'}; font-weight:700;">-${fm.drop3to4}%</td>
+								<td><span style="background:${fm.drop3to4 > 15 ? 'rgba(255,128,128,0.2)' : 'rgba(127,224,168,0.2)'}; color:${fm.drop3to4 > 15 ? '#ff8080' : '#7fe0a8'}; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">${fm.drop3to4 > 15 ? 'Prüfen' : 'Optimal'}</span></td>
+								<td style="color:#9aa7c2;">LernSax-Schnellauswahl (@gymwilsdruff.lernsax.de) erspart Tippaufwand &amp; schafft Vertrauen.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#ffaa7f;">5. Schritt 3: Begleitung &amp; Alter</td>
+								<td style="font-weight:700; color:#fff;">${fm.s5_comp}</td>
+								<td style="font-weight:600; color:#ffaa7f;">${Math.round((fm.s5_comp / base) * 100)}%</td>
+								<td style="color:${fm.drop4to5 > 15 ? '#ff8080' : '#7fe0a8'}; font-weight:700;">-${fm.drop4to5}%</td>
+								<td><span style="background:${fm.drop4to5 > 15 ? 'rgba(255,128,128,0.2)' : 'rgba(127,224,168,0.2)'}; color:${fm.drop4to5 > 15 ? '#ff8080' : '#7fe0a8'}; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">${fm.drop4to5 > 15 ? 'Haupt-Bottleneck' : 'Gut'}</span></td>
+								<td style="color:#9aa7c2;">Häufige Hürde: Unsicherheit bei Begleitpersonen. Wichtiger Tipp: Begleitungen können auch später nachgemeldet werden!</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#93c5fd;">6. Schritt 4: Zusammenfassung</td>
+								<td style="font-weight:700; color:#fff;">${fm.s6_summary}</td>
+								<td style="font-weight:600; color:#93c5fd;">${Math.round((fm.s6_summary / base) * 100)}%</td>
+								<td style="color:${fm.drop5to6 > 10 ? '#ff8080' : '#7fe0a8'}; font-weight:700;">-${fm.drop5to6}%</td>
+								<td><span style="background:rgba(127,224,168,0.2); color:#7fe0a8; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Hohe Bindung</span></td>
+								<td style="color:#9aa7c2;">Fast geschafft: Übersichtliche mobile Karte. Datenschutz-Checkbox klar &amp; transparent.</td>
+							</tr>
+							<tr>
+								<td style="font-weight:700; color:#7fe0a8;">7. Bestellung abgeschlossen</td>
+								<td style="font-weight:700; color:#fff;">${fm.s7_submitted}</td>
+								<td style="font-weight:700; color:#7fe0a8;">${fm.formConversionRate}%</td>
+								<td style="color:#7fe0a8; font-weight:700;">-${fm.drop6to7}%</td>
+								<td><span style="background:rgba(127,224,168,0.2); color:#7fe0a8; padding:3px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">Erfolg</span></td>
+								<td style="color:#7fe0a8; font-weight:600;">Erfolgreiche Ticket-Reservierung! Belohnungskarte zum Instagram-Teilen sorgt für Viralität.</td>
+							</tr>
+						</tbody>
+					</table>
+				`;
+			}
+
+			// Action & Recommendation Box am Fuß
+			const actionBoxHtml = `
+				<div style="margin-top:20px; background:linear-gradient(135deg, rgba(143,180,255,0.06), rgba(127,224,168,0.04)); border:1px solid rgba(143,180,255,0.18); border-radius:12px; padding:18px;">
+					<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+						<div>
+							<div style="font-size:14px; font-weight:800; color:#fff; display:flex; align-items:center; gap:8px;">
+								<span style="color:#ffd27f;">⚡</span> Sofortmaßnahmen zur Conversion-Steigerung
+							</div>
+							<div style="font-size:12px; color:#9aa7c2; margin-top:4px;">
+								Aktuell warten <strong style="color:#ffd27f;">${fm.openTickets} Tickets</strong> (${formatCents(fm.openRevenue * 100)}) auf Bezahlung an der Kasse oder per Überweisung.
+							</div>
+						</div>
+						<div style="display:flex; gap:8px; flex-wrap:wrap;">
+							<button type="button" onclick="window.filterUnpaidFromFunnel()" style="background:rgba(255,210,127,0.18); border:1px solid rgba(255,210,127,0.35); color:#ffd27f; font-weight:700; padding:8px 14px; border-radius:8px; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+								Unbezahlte anzeigen (${fm.openTickets})
+							</button>
+							<button type="button" onclick="window.copyPaymentReminderText()" style="background:rgba(143,180,255,0.18); border:1px solid rgba(143,180,255,0.35); color:#8fb4ff; font-weight:700; padding:8px 14px; border-radius:8px; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+								Erinnerungstext kopieren
+							</button>
+						</div>
+					</div>
+					<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-top:14px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.06);">
+						<div style="font-size:11.5px; color:#c7d7f7;">
+							<strong style="color:#8fb4ff;">1. Kassenzeiten erinnern:</strong> In Schul-Durchsagen oder WhatsApp-Klassengruppen die Pausenzeiten der Schülerkasse ankündigen.
+						</div>
+						<div style="font-size:11.5px; color:#c7d7f7;">
+							<strong style="color:#a78bfa;">2. Begleitungs-Hürde senken:</strong> Schülern signalisieren, dass Begleitpersonen auch am Ballabend noch an der Abendkasse gelöst werden können.
+						</div>
+						<div style="font-size:11.5px; color:#c7d7f7;">
+							<strong style="color:#7fe0a8;">3. Countdown-Push:</strong> Bei unter 5 Tagen bis zum Anmeldeschluss schnellt die Konversion erfahrungsgemäß um 40-70% nach oben!
+						</div>
+					</div>
+				</div>
+			`;
+
+			detailBox.innerHTML = tableHtml + actionBoxHtml;
+			return;
+		}
+
+		// 8. CAPACITY & REVENUE FORECAST MODAL (Mit individueller Kapazitäts-Einstellung & Catering)
+		if (widgetType === 'forecast') {
+			iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>';
+			iconEl.style.background = 'rgba(143,180,255,0.18)';
+			iconEl.style.color = '#8fb4ff';
+			titleEl.textContent = 'Saal-Kapazität & Ticket-Prognose';
+			subEl.textContent = 'Auslastung, Burn-up Hochrechnung, individuelle Kapazität und Catering-Kalkulation';
+
+			const hallCapacity = currentHallCapacity || 250;
+			const foreMetrics = getForecastMetrics(hallCapacity);
+			const revStats = calculateRevenueStats();
+
+			// Tages-Tickets kumulativ für Burn-up Chart
+			let cumTickets = 0;
+			const cumData = foreMetrics.sortedDays.map(k => {
+				cumTickets += foreMetrics.ticketsByDay[k];
+				return cumTickets;
+			});
+
+			const dayLabels = foreMetrics.sortedDays.map(k => {
+				const [y, m, dd] = k.split('-');
+				return `${dd}.${m}.`;
+			});
+
+			kpiEl.innerHTML = `
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Vorauss. Gesamtumsatz</div>
+					<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${formatCents(revStats.totalProjectedCents)}</div>
+					<div class="widget-modal-kpi-sub">Alle erfassten Tickets &amp; Spenden</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Tatsächlicher Umsatz (Bezahlt)</div>
+					<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${formatCents(revStats.totalActualCents)}</div>
+					<div class="widget-modal-kpi-sub">Am Ende wirklich bezahlt</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Davon Spenden</div>
+					<div class="widget-modal-kpi-val" style="color:#ffd27f;">${formatCents(revStats.actualDonationCents)}</div>
+					<div class="widget-modal-kpi-sub">Von ${formatCents(revStats.projectedDonationCents)} erwarteten Spenden</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Auslastung aktuell</div>
+					<div class="widget-modal-kpi-val" style="color:#c7d7f7;">${foreMetrics.currentTickets} / ${foreMetrics.hallCapacity}</div>
+					<div class="widget-modal-kpi-sub">${foreMetrics.capPercent}% (${foreMetrics.remainingSeats} Plätze frei)</div>
+				</div>
+			`;
+
+			chartBox.style.display = 'block';
+			modalChart = new Chart(canvas, {
+				type: 'line',
+				data: {
+					labels: dayLabels.length ? dayLabels : ['Start'],
+					datasets: [
+						{
+							label: 'Verkaufte Tickets (kumuliert)',
+							data: cumData.length ? cumData : [foreMetrics.currentTickets],
+							borderColor: '#7fe0a8',
+							backgroundColor: 'rgba(127, 224, 168, 0.15)',
+							fill: true,
+							tension: 0.3,
+							borderWidth: 3,
+							pointRadius: 4,
+							pointBackgroundColor: '#7fe0a8'
+						},
+						{
+							label: `Saal-Maximum (${hallCapacity} Plätze)`,
+							data: (dayLabels.length ? dayLabels : ['Start']).map(() => hallCapacity),
+							borderColor: 'rgba(255, 128, 128, 0.75)',
+							borderDash: [6, 4],
+							borderWidth: 2,
+							pointRadius: 0,
+							fill: false
+						}
+					]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { position: 'top', labels: { color: '#c7d7f7', font: { size: 12, weight: '600' } } },
+						tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y} Tickets` } }
+					},
+					scales: {
+						y: { beginAtZero: true, max: Math.max(hallCapacity + 20, foreMetrics.currentTickets + 20), ticks: { color: '#9aa7c2' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+						x: { ticks: { color: '#9aa7c2' }, grid: { display: false } }
+					}
+				}
+			});
+
+			detailBox.style.display = 'block';
+			detailBox.innerHTML = `
+				<!-- Schnellauswahl & Anpassung der Saal-Kapazität direkt im Modal -->
+				<div style="background:rgba(255,255,255,0.035); border:1px solid rgba(143,180,255,0.25); border-radius:12px; padding:16px 18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+					<div>
+						<div style="font-size:13.5px; font-weight:700; color:#fff;">Saal-Kapazität anpassen</div>
+						<div style="font-size:11.5px; color:#9aa7c2;">Aktuell: <strong style="color:#8fb4ff;">${hallCapacity} Plätze</strong> (${foreMetrics.remainingSeats} Plätze frei)</div>
+					</div>
+					<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+						<span style="font-size:11px; color:#9aa7c2;">Schnellwahl:</span>
+						<button type="button" class="btn-cap-preset" data-cap="200" style="padding:4px 10px; font-size:11.5px; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; cursor:pointer;">200</button>
+						<button type="button" class="btn-cap-preset" data-cap="250" style="padding:4px 10px; font-size:11.5px; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; cursor:pointer;">250</button>
+						<button type="button" class="btn-cap-preset" data-cap="300" style="padding:4px 10px; font-size:11.5px; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; cursor:pointer;">300</button>
+						<button type="button" class="btn-cap-preset" data-cap="350" style="padding:4px 10px; font-size:11.5px; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; cursor:pointer;">350</button>
+						<button type="button" id="btnCustomCapModal" style="padding:5px 12px; font-size:12px; font-weight:700; border-radius:6px; background:rgba(143,180,255,0.2); border:1px solid rgba(143,180,255,0.4); color:#8fb4ff; cursor:pointer;">Eigene Kapazität</button>
+					</div>
+				</div>
+
+				<table class="widget-modal-table">
+					<thead>
+						<tr>
+							<th>Finanz- &amp; Planungsbereich</th>
+							<th>Tatsächlich bezahlt</th>
+							<th>Voraussichtlich gesamt</th>
+							<th>Status / Orga-Hinweis</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td style="font-weight:700; color:#fff;">Ticket-Umsatz U18 (${revStats.u18Count} Tickets)</td>
+							<td style="font-weight:700; color:#7fe0a8;">${formatCents(revStats.actualU18Cents)}</td>
+							<td style="font-weight:700; color:#8fb4ff;">${formatCents(revStats.projectedU18Cents)}</td>
+							<td style="color:#9aa7c2;">${revStats.u18PaidCount} von ${revStats.u18Count} U18-Tickets bezahlt</td>
+						</tr>
+						<tr>
+							<td style="font-weight:700; color:#fff;">Ticket-Umsatz Ü18 (${revStats.ue18Count} Tickets)</td>
+							<td style="font-weight:700; color:#7fe0a8;">${formatCents(revStats.actualUe18Cents)}</td>
+							<td style="font-weight:700; color:#8fb4ff;">${formatCents(revStats.projectedUe18Cents)}</td>
+							<td style="color:#9aa7c2;">${revStats.ue18PaidCount} von ${revStats.ue18Count} Ü18-Tickets bezahlt</td>
+						</tr>
+						<tr>
+							<td style="font-weight:700; color:#fff;">Freiwillige Spenden (Abikasse Jahrgang 12)</td>
+							<td style="font-weight:700; color:#ffd27f;">${formatCents(revStats.actualDonationCents)}</td>
+							<td style="font-weight:700; color:#ffd27f;">${formatCents(revStats.projectedDonationCents)}</td>
+							<td style="color:#9aa7c2;">${revStats.donationPaidCount} von ${revStats.donationCount} Spendern bereits bezahlt</td>
+						</tr>
+						<tr style="background:rgba(255,255,255,0.06);">
+							<td style="font-weight:800; color:#fff;">Gesamtsumme Brutto</td>
+							<td style="font-weight:800; color:#7fe0a8; font-size:15px;">${formatCents(revStats.totalActualCents)}</td>
+							<td style="font-weight:800; color:#8fb4ff; font-size:15px;">${formatCents(revStats.totalProjectedCents)}</td>
+							<td style="color:#ffd27f; font-weight:700;">davon ${formatCents(revStats.actualDonationCents)} freiwillige Spenden</td>
+						</tr>
+					</tbody>
+				</table>
+
+				<!-- Event- & Catering-Bedarfs-Empfehlungen -->
+				<div style="margin-top:18px; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+					<div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:12px 14px;">
+						<div style="font-size:11px; color:#9aa7c2; text-transform:uppercase; font-weight:700;">Buffet &amp; Essen</div>
+						<div style="font-size:16px; font-weight:800; color:#ffd27f; margin-top:4px;">~${foreMetrics.currentTickets} Portionen</div>
+						<div style="font-size:11px; color:#9aa7c2; margin-top:2px;">Kalkulation: 1 Portion pro Gast (+10% Puffer = ${Math.round(foreMetrics.currentTickets * 1.1)})</div>
+					</div>
+					<div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:12px 14px;">
+						<div style="font-size:11px; color:#9aa7c2; text-transform:uppercase; font-weight:700;">Getränke-Planung</div>
+						<div style="font-size:16px; font-weight:800; color:#8fb4ff; margin-top:4px;">~${Math.round(foreMetrics.currentTickets * 2.5)} Gläser</div>
+						<div style="font-size:11px; color:#9aa7c2; margin-top:2px;">Kalkulation: Ø 2.5 Getränke pro Gast über den Abend</div>
+					</div>
+					<div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:12px 14px;">
+						<div style="font-size:11px; color:#9aa7c2; text-transform:uppercase; font-weight:700;">Garderobe &amp; Einlass</div>
+						<div style="font-size:16px; font-weight:800; color:#7fe0a8; margin-top:4px;">${Math.round(foreMetrics.currentTickets * 1.1)} Bügel</div>
+						<div style="font-size:11px; color:#9aa7c2; margin-top:2px;">Empfohlen: Mind. 2 Personen am Check-in zwischen 17:30 &amp; 18:30</div>
+					</div>
+				</div>
+			`;
+
+			// Preset buttons click listeners
+			detailBox.querySelectorAll('.btn-cap-preset').forEach(btn => {
+				btn.addEventListener('click', () => setHallCapacity(btn.dataset.cap));
+			});
+			document.getElementById('btnCustomCapModal')?.addEventListener('click', () => {
+				const entered = prompt('Neue maximale Saal-Kapazität festlegen (Plätze):', String(currentHallCapacity));
+				if (entered !== null) setHallCapacity(entered);
+			});
+			return;
+		}
+
+		// 9. PEAK TIMES & ACTIVITY MODAL (Mit Umschalter zwischen Buchungen & Web-Traffic)
+		if (widgetType === 'peaktimes') {
+			iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+			iconEl.style.background = 'rgba(255,210,127,0.18)';
+			iconEl.style.color = '#ffd27f';
+			titleEl.textContent = 'Tages- & Stunden-Aktivität (Peak Times)';
+			subEl.textContent = 'Verteilung aller Aktivitäten nach Wochentagen und Uhrzeiten für optimale Promo-Planung';
+
+			const hourCounts = new Array(24).fill(0);
+			const weekdayCounts = [0, 0, 0, 0, 0, 0, 0];
+			const weekdayNames = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
+
+			const isBookings = peaktimesMetric === 'bookings';
+			const sourceList = isBookings ? allRegs : allPageviews;
+
+			sourceList.forEach(item => {
+				const d = tsToDate(item.createdAt);
+				if (!d) return;
+				hourCounts[d.getHours()]++;
+				const dayIdx = (d.getDay() + 6) % 7;
+				weekdayCounts[dayIdx]++;
+			});
+
+			let maxHourIdx = 0;
+			let maxHourVal = 0;
+			hourCounts.forEach((val, h) => {
+				if (val > maxHourVal) { maxHourVal = val; maxHourIdx = h; }
+			});
+			let maxDayIdx = 0;
+			let maxDayVal = 0;
+			weekdayCounts.forEach((val, d) => {
+				if (val > maxDayVal) { maxDayVal = val; maxDayIdx = d; }
+			});
+
+			const totalEvents = Math.max(1, sourceList.length);
+			const weekendCount = weekdayCounts[5] + weekdayCounts[6];
+			const weekendPct = Math.round((weekendCount / totalEvents) * 100);
+			const schoolBreakCount = hourCounts[9] + hourCounts[10] + hourCounts[11] + hourCounts[12] + hourCounts[13];
+			const schoolBreakPct = Math.round((schoolBreakCount / totalEvents) * 100);
+
+			kpiEl.innerHTML = `
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Stärkste Uhrzeit</div>
+					<div class="widget-modal-kpi-val" style="color:#ffd27f;">${maxHourVal > 0 ? maxHourIdx + ':00 Uhr' : '–'}</div>
+					<div class="widget-modal-kpi-sub">${maxHourVal > 0 ? `${maxHourVal} ${isBookings ? 'Buchungen' : 'Aufrufe'} (${maxHourIdx}:00 – ${maxHourIdx+1}:00)` : 'Noch keine Daten'}</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Bester Wochentag</div>
+					<div class="widget-modal-kpi-val" style="color:#8fb4ff;">${maxDayVal > 0 ? weekdayNames[maxDayIdx] : '–'}</div>
+					<div class="widget-modal-kpi-sub">${maxDayVal > 0 ? `${maxDayVal} ${isBookings ? 'Buchungen' : 'Aufrufe'} an diesem Tag` : 'Noch keine Daten'}</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Wochenend-Quote</div>
+					<div class="widget-modal-kpi-val" style="color:#7fe0a8;">${sourceList.length > 0 ? weekendPct + '%' : '0%'}</div>
+					<div class="widget-modal-kpi-sub">Samstag &amp; Sonntag</div>
+				</div>
+				<div class="widget-modal-kpi-card">
+					<div class="widget-modal-kpi-lbl">Pausen-Aktivität</div>
+					<div class="widget-modal-kpi-val" style="color:#a78bfa;">${sourceList.length > 0 ? schoolBreakPct + '%' : '0%'}</div>
+					<div class="widget-modal-kpi-sub">Schulzeit (09:00 – 14:00 Uhr)</div>
+				</div>
+			`;
+
+			chartBox.style.display = 'block';
+
+			// Toggle Button Leiste oben über dem Chart
+			chartBox.innerHTML = `
+				<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+					<div style="font-size:12.5px; color:#c7d7f7; font-weight:700;">Aktivität nach Uhrzeit (24-Stunden-Kurve):</div>
+					<div style="display:inline-flex; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:2px;">
+						<button type="button" id="btnPeakMetricBookings" style="padding:5px 12px; font-size:11.5px; font-weight:700; border-radius:6px; border:none; cursor:pointer; background:${isBookings ? '#ffd27f' : 'transparent'}; color:${isBookings ? '#0e1626' : '#9aa7c2'};">Ticket-Buchungen (${allRegs.length})</button>
+						<button type="button" id="btnPeakMetricViews" style="padding:5px 12px; font-size:11.5px; font-weight:700; border-radius:6px; border:none; cursor:pointer; background:${!isBookings ? '#8fb4ff' : 'transparent'}; color:${!isBookings ? '#0e1626' : '#9aa7c2'};">Website-Aufrufe (${allPageviews.length})</button>
+					</div>
+				</div>
+				<div style="height:220px; position:relative;">
+					<canvas id="modalChartCanvasPeak"></canvas>
+				</div>
+			`;
+
+			document.getElementById('btnPeakMetricBookings')?.addEventListener('click', () => {
+				peaktimesMetric = 'bookings';
+				renderModalContent('peaktimes');
+			});
+			document.getElementById('btnPeakMetricViews')?.addEventListener('click', () => {
+				peaktimesMetric = 'pageviews';
+				renderModalContent('peaktimes');
+			});
+
+			const peakCanvas = document.getElementById('modalChartCanvasPeak');
+			const hourLabels = Array.from({length: 24}, (_, i) => `${i}:00`);
+
+			modalChart = new Chart(peakCanvas, {
+				type: 'bar',
+				data: {
+					labels: hourLabels,
+					datasets: [{
+						label: isBookings ? 'Buchungen nach Uhrzeit' : 'Website-Aufrufe nach Uhrzeit',
+						data: hourCounts,
+						backgroundColor: hourCounts.map((val, h) => (val > 0 && h === maxHourIdx) ? '#ffd27f' : 'rgba(143,180,255,0.55)'),
+						borderColor: hourCounts.map((val, h) => (val > 0 && h === maxHourIdx) ? '#ffd27f' : '#8fb4ff'),
+						borderWidth: 1,
+						borderRadius: 4
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { display: false },
+						tooltip: { callbacks: { label: (ctx) => ` ${ctx.parsed.y} ${isBookings ? 'Buchungen' : 'Aufrufe'} um ${ctx.label}` } }
+					},
+					scales: {
+						y: { beginAtZero: true, ticks: { precision: 0, color: '#9aa7c2' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+						x: { ticks: { color: '#9aa7c2', maxRotation: 45, minRotation: 45, font: { size: 10 } }, grid: { display: false } }
+					}
+				}
+			});
+
+			detailBox.style.display = 'block';
+			detailBox.innerHTML = `
+				<table class="widget-modal-table">
+					<thead>
+						<tr>
+							<th>Wochentag</th>
+							<th>${isBookings ? 'Buchungen' : 'Aufrufe'}</th>
+							<th>Anteil</th>
+							<th>Empfohlene Social-Media- &amp; Promo-Aktion</th>
+						</tr>
+					</thead>
+					<tbody>
+						${weekdayNames.map((dayName, idx) => {
+							const cnt = weekdayCounts[idx];
+							const pct = sourceList.length > 0 ? Math.round((cnt / sourceList.length) * 100) : 0;
+							const isPeak = maxDayVal > 0 && idx === maxDayIdx;
+							let tip = 'Reguläre Erinnerungen';
+							if (idx === 6) tip = '★ Sonntagabend: Idealer Zeitpunkt für Instagram Story & Countdown-Posts (18:00 – 21:00 Uhr)';
+							else if (idx === 0) tip = 'Montag: Große Pause nutzen (11:15 Uhr) für Durchsagen & Pausenkasse-Erinnerung';
+							else if (idx === 4) tip = 'Freitag: Wochenend-Vorfreude teilen & Ticketkauf vor dem Wochenende ankurbeln';
+							else if (idx === 2) tip = 'Mittwoch: Bergfest-Story mit Einblicken (z.B. DJ-Vorbereitung oder Deko-Teaser)';
+							return `
+								<tr>
+									<td style="font-weight:700; color:${isPeak ? '#ffd27f' : '#fff'};">
+										${dayName} ${isPeak ? '<span style="color:#ffd27f; margin-left:4px;">★ PEAK</span>' : ''}
+									</td>
+									<td style="font-weight:700; color:${isPeak ? '#ffd27f' : '#8fb4ff'};">${cnt}</td>
+									<td>${pct}%</td>
+									<td style="color:${isPeak ? '#ffd27f' : '#9aa7c2'}; font-weight:${isPeak ? '600' : 'normal'};">${tip}</td>
+								</tr>
+							`;
+						}).join('')}
+					</tbody>
+				</table>
+			`;
+			return;
+		}
+	}
+
+
+	 function renderModalLivePresence(activeVisitors){
+ const kpiEl = document.getElementById('modalKpiRow');
+ const liveBox = document.getElementById('modalLiveBox');
+ const detailBox = document.getElementById('modalDetailBox');
+ const count = activeVisitors.length;
+
+ kpiEl.innerHTML = `
+ <div class="widget-modal-kpi-card" style="border-color:rgba(127,224,168,0.3); background:rgba(127,224,168,0.06);">
+ <div class="widget-modal-kpi-lbl" style="color:#7fe0a8;">Aktuell online</div>
+ <div class="widget-modal-kpi-val" style="color:#7fe0a8; display:flex; align-items:center; gap:8px;">
+ <span>${count}</span>
+ <span class="pulse-dot" style="background:#7fe0a8; width:8px; height:8px; display:${count > 0 ? 'inline-block' : 'none'};"></span>
+ </div>
+ <div class="widget-modal-kpi-sub">${count === 1 ? '1 Besucher aktiv' : `${count} Besucher aktiv`}</div>
+ </div>
+ <div class="widget-modal-kpi-card">
+ <div class="widget-modal-kpi-lbl">Aktivitäts-Status</div>
+ <div class="widget-modal-kpi-val" style="font-size:18px;">${count > 0 ? ' Verbunden' : ' Keine Aktivität'}</div>
+ <div class="widget-modal-kpi-sub">Letzte 90 Sekunden</div>
+ </div>
+ <div class="widget-modal-kpi-card">
+ <div class="widget-modal-kpi-lbl">Heartbeat-Signal</div>
+ <div class="widget-modal-kpi-val" style="font-size:18px; color:#8fb4ff;">Alle 45 Sek.</div>
+ <div class="widget-modal-kpi-sub">Automatischer Timeout</div>
+ </div>
+ <div class="widget-modal-kpi-card">
+ <div class="widget-modal-kpi-lbl">Datenschutz</div>
+ <div class="widget-modal-kpi-val" style="font-size:18px; color:#7fe0a8;">DSGVO-konform</div>
+ <div class="widget-modal-kpi-sub">Keine IP, keine Tracking-Cookies</div>
+ </div>
+ `;
+
+ if (count === 0) {
+ liveBox.innerHTML = `
+ <div style="padding:34px 20px; text-align:center; background:rgba(255,255,255,0.03); border:1px dashed rgba(255,255,255,0.12); border-radius:14px; color:#9aa7c2;">
+ <div style="width:48px; height:48px; border-radius:50%; background:rgba(127,224,168,0.1); color:#7fe0a8; display:flex; align-items:center; justify-content:center; margin:0 auto 12px auto;">
+ <svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+ </div>
+ <div style="font-size:15px; font-weight:700; color:#fff;">Aktuell befindet sich niemand auf der Website</div>
+ <div style="font-size:12.5px; margin-top:6px; max-width:440px; margin-left:auto; margin-right:auto;">
+ Sobald ein Nutzer die Startseite, Ticket-Anmeldung oder Vorabstimmung aufruft, erscheint die aktive Sitzung hier im Sekundentakt live.
+ </div>
+ </div>
+ `;
+ detailBox.style.display = 'none';
+ } else {
+ liveBox.innerHTML = `
+ <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:12px;">
+ ${activeVisitors.map(v => {
+ let iconSvg = '';
+ if (v.device === 'mobile') {
+ iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
+ } else if (v.device === 'tablet') {
+ iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
+ } else {
+ iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+ }
+ const secAgo = v.lastSeenAgoSec;
+ const timeText = secAgo < 60 ? `vor ${secAgo}s aktiv` : `vor ${Math.round(secAgo/60)} Min. aktiv`;
+
+ return `
+ <div style="background:rgba(255,255,255,0.035); border:1px solid rgba(127,224,168,0.3); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:8px;">
+ <div style="display:flex; align-items:center; justify-content:space-between;">
+ <div style="display:flex; align-items:center; gap:8px;">
+ <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:rgba(127,224,168,0.18); color:#7fe0a8;">
+ ${iconSvg}
+ </span>
+ <span style="font-weight:700; color:#fff; font-size:13.5px;">${escapeHtml(v.page)}</span>
+ </div>
+ <span style="background:rgba(127,224,168,0.15); color:#7fe0a8; border:1px solid rgba(127,224,168,0.3); padding:2px 8px; border-radius:100px; font-size:10.5px; font-weight:700;">${timeText}</span>
+ </div>
+ <div style="font-size:12px; color:#9aa7c2; display:flex; align-items:center; gap:6px;">
+ <span> ${escapeHtml(v.os)}</span>
+ <span>•</span>
+ <span> ${escapeHtml(v.browser)}</span>
+ </div>
+ <div style="font-size:11px; color:rgba(255,255,255,0.3); font-family:monospace; margin-top:2px;">
+ Sitzungs-ID: #${escapeHtml((v.sid || '').slice(0, 10))}
+ </div>
+ </div>
+ `;
+ }).join('')}
+ </div>
+ `;
+ detailBox.style.display = 'none';
+ }
+ }
+
+ let currentHallCapacity = Number(localStorage.getItem("wb27_hall_capacity")) || 250;
+let allRatings = [];
+
+ function renderRatings(){
+ const ratingsCanvas = document.getElementById('chartRatings');
+ if (!ratingsCanvas) return;
+
+ // Nur reine Feedback-Bewertungen berücksichtigen (keine Vorabstimmungs- oder Pageview-Datensätze)
+ const validRatings = allRatings.filter(r => r.context !== 'vorabstimmung' && r.type !== 'vorabstimmung' && r.type !== 'pageview');
+
+ const count = validRatings.length;
+ const avg = count ? validRatings.reduce((sum, r) => sum + (Number(r.stars) || 0), 0) / count : 0;
+ document.getElementById('statRatingAvg').textContent = count ? avg.toFixed(1) + ' / 5' : '–';
+ document.getElementById('statRatingCount').textContent = count;
+ const tabRatingBadge = document.getElementById('tabRatingCount');
+ if (tabRatingBadge) tabRatingBadge.textContent = count;
+
+ const distribution = [1,2,3,4,5].map(v => validRatings.filter(r => Number(r.stars) === v).length);
+
+ if (chartRatings) chartRatings.destroy();
+ chartRatings = new Chart(ratingsCanvas, {
+ type: 'bar',
+ data: {
+ labels: ['1 Stern','2 Sterne','3 Sterne','4 Sterne','5 Sterne'],
+ datasets: [{ data: distribution, backgroundColor: '#8fb4ff', borderRadius: 6 }]
+ },
+ options: {
+ plugins: { legend: { display: false } },
+ scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+ maintainAspectRatio: true,
+ }
+ });
+
+ const sortedRatings = [...validRatings]
+ .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0));
+
+ const starSvg = (active) => `<svg viewBox="0 0 24 24" fill="${active ? 'var(--accent-glow)' : 'rgba(255,255,255,0.12)'}" stroke="${active ? 'var(--accent)' : 'rgba(255,255,255,0.2)'}" stroke-width="1.5" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:2px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+
+ const list = document.getElementById('ratingsCommentList');
+ if (!list) return;
+ list.innerHTML = sortedRatings.length
+ ? sortedRatings.map(r => {
+ const starsHtml = [1,2,3,4,5].map(i => starSvg(i <= (Number(r.stars)||0))).join('');
+ return `
+ <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:12px 14px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-sm);">
+ <div style="flex-grow:1;">
+ <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+ <span style="display:inline-flex; align-items:center;">${starsHtml}</span>
+ ${r.context === 'registration'
+ ? '<span style="font-size:10.5px; padding:2px 8px; border-radius:12px; background:rgba(143,180,255,0.15); border:1px solid rgba(143,180,255,0.35); color:var(--accent-glow);">Anmeldeprozess</span>'
+ : '<span style="font-size:10.5px; padding:2px 8px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid var(--glass-border); color:var(--text-dim);">Website</span>'}
+ <span style="font-size:11px; color:var(--text-dim);">${formatTimestamp(r.createdAt)}</span>
+ </div>
+ <div style="font-size:13.5px; color:${r.comment ? 'var(--text)' : 'var(--text-dim)'}; font-style:${r.comment ? 'normal' : 'italic'};">
+ ${r.comment ? escapeHtml(r.comment) : 'Kein Kommentar hinterlassen'}
+ </div>
+ </div>
+ <button class="delete-btn delete-rating-btn" data-id="${r.id}" title="Diese Bewertung löschen" style="flex-shrink:0;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+ </button>
+ </div>`;
+ }).join('')
+ : '<div style="color:var(--text-dim); font-size:13px;">Noch keine Bewertungen vorhanden.</div>';
+
+ list.querySelectorAll('.delete-rating-btn').forEach(btn => {
+ btn.addEventListener('click', async () => {
+ const id = btn.dataset.id;
+ if (!id) return;
+ if (!confirm('Diese Bewertung wirklich löschen?')) return;
+ btn.disabled = true;
+ try {
+ await deleteDoc(doc(db, 'ratings', id));
+ } catch(err) {
+ alert('Fehler beim Löschen: ' + err.message);
+ btn.disabled = false;
+ }
+ });
+ });
+ }
+
+ document.getElementById('resetAllRatingsBtn')?.addEventListener('click', async () => {
+ const validRatings = allRatings.filter(r => r.context !== 'vorabstimmung' && r.type !== 'vorabstimmung');
+ if (validRatings.length === 0) {
+ alert('Keine Bewertungen zum Zurücksetzen vorhanden.');
+ return;
+ }
+ if (!confirm(`Wirklich ALLE ${validRatings.length} Bewertungen unwiderruflich löschen?`)) return;
+ try {
+ const snap = await getDocs(collection(db, 'ratings'));
+ const batch = writeBatch(db);
+ snap.docs.forEach(d => {
+ const data = d.data();
+ if (data.context !== 'vorabstimmung' && data.type !== 'vorabstimmung') {
+ batch.delete(d.ref);
+ }
+ });
+ await batch.commit();
+ alert('Alle Bewertungen wurden zurückgesetzt.');
+ } catch(err) {
+ alert('Fehler beim Zurücksetzen: ' + err.message);
+ }
+ });
+
+ // --- Analytics & Live Presence ---
+ let allPageviews = [];
+ let allPresenceEvents = [];
+ let apiActiveVisitors = [];
+ let lastPresenceCleanup = 0;	let serverPresenceDisabled = false;
+
+	async function fetchServerPresence(){
+		if (serverPresenceDisabled) return;
+		try {
+			const res = await fetch('/api/presence');
+			if (res.status === 404) {
+				serverPresenceDisabled = true;
+				return;
+			}
+			if (res.ok) {
+				const data = await res.json();
+				if (data && Array.isArray(data.visitors)) {
+					apiActiveVisitors = data.visitors;
+					renderLivePresence();
+				}
+			}
+		} catch(e) {}
+	}
+	setInterval(fetchServerPresence, 15000);
+	fetchServerPresence();
+
+ function getActiveVisitors(){
+ const now = Date.now();
+ const TIMEOUT_MS = 90 * 1000;
+ const sessionMap = new Map();
+
+ allPresenceEvents.forEach(ev => {
+ const sid = ev.sid;
+ if (!sid || sessionMap.has(sid)) return;
+ const ts = tsToDate(ev.createdAt);
+ if (!ts) return;
+ const ageMs = now - ts.getTime();
+
+ if (ev.type === 'presence_leave') {
+ sessionMap.set(sid, { active: false });
+ return;
+ }
+
+ if (ageMs <= TIMEOUT_MS && ageMs >= -30000) {
+ sessionMap.set(sid, {
+ active: true,
+ sid,
+ page: ev.page || 'Startseite',
+ device: ev.device || 'desktop',
+ os: ev.os || 'Anderes',
+ browser: ev.browser || 'Browser',
+ lastSeenAgoSec: Math.max(1, Math.round(ageMs / 1000)),
+ lastSeenDate: ts
+ });
+ } else {
+ sessionMap.set(sid, { active: false });
+ }
+ });
+
+ apiActiveVisitors.forEach(v => {
+ const sid = v.sid;
+ if (!sessionMap.has(sid)) {
+ sessionMap.set(sid, {
+ active: true,
+ sid,
+ page: v.page || 'Startseite',
+ device: v.device || 'desktop',
+ os: v.os || 'Anderes',
+ browser: v.browser || 'Browser',
+ lastSeenAgoSec: v.lastSeenAgoSec || 1,
+ lastSeenDate: new Date()
+ });
+ }
+ });
+
+ const activeList = [];
+ sessionMap.forEach(info => {
+ if (info.active) activeList.push(info);
+ });
+ activeList.sort((a, b) => a.lastSeenAgoSec - b.lastSeenAgoSec);
+ return activeList;
+ }
+
+ function renderLivePresence(){
+ const activeVisitors = getActiveVisitors();
+ const count = activeVisitors.length;
+
+ // Header Pill
+ const elHeaderPill = document.getElementById('headerLiveVisitorsText');
+ if (elHeaderPill) {
+ elHeaderPill.textContent = count === 1 ? '1 online' : `${count} online`;
+ }
+
+ // Tab Badge
+ const elTabBadge = document.getElementById('tabLiveBadge');
+ if (elTabBadge) {
+ elTabBadge.textContent = `${count} live`;
+ elTabBadge.style.background = count > 0 ? 'rgba(127,224,168,0.3)' : 'rgba(127,224,168,0.15)';
+ elTabBadge.style.color = count > 0 ? '#7fe0a8' : '#9aa7c2';
+ }
+
+ // Insights Live Card Count (legacy elements if present)
+ const elStatLiveCount = document.getElementById('statLiveCount');
+ if (elStatLiveCount) {
+ elStatLiveCount.innerHTML = `<span>${count}</span><span class="pulse-dot" style="width:8px; height:8px; display:${count > 0 ? 'inline-block' : 'none'};"></span>`;
+ }
+ const elStatLiveSub = document.getElementById('statLiveSub');
+ if (elStatLiveSub) {
+ elStatLiveSub.textContent = count === 1 ? '1 Person aktiv' : `${count} Personen aktiv`;
+ }
+
+ const elBadgeActive = document.getElementById('badgeActiveVisitors');
+ if (elBadgeActive) {
+ elBadgeActive.textContent = count;
+ }
+ const mobLiveBadge = document.getElementById('mobileBadgeLive');
+ if (mobLiveBadge) {
+ mobLiveBadge.textContent = count;
+ }
+
+ // Widget 1: Live auf der Seite
+ const elWidgetLiveCount = document.getElementById('widgetLiveCount');
+ if (elWidgetLiveCount) {
+ elWidgetLiveCount.textContent = count;
+ }
+ const elWidgetLiveSub = document.getElementById('widgetLiveSub');
+ if (elWidgetLiveSub) {
+ elWidgetLiveSub.textContent = count === 1 ? '1 Person online' : `${count} Personen online`;
+ }
+ const elWidgetMiniChips = document.getElementById('widgetLiveMiniChips');
+ if (elWidgetMiniChips) {
+ if (count === 0) {
+ elWidgetMiniChips.innerHTML = '<span style="font-size:11px; color:#9aa7c2; background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);">Aktuell niemand online</span>';
+ } else {
+ elWidgetMiniChips.innerHTML = activeVisitors.slice(0, 3).map(v => {
+ let devIcon = v.device === 'mobile' ? '' : (v.device === 'tablet' ? '' : '');
+ return `<span style="font-size:11px; font-weight:600; color:#e0f7eb; background:rgba(127,224,168,0.15); border:1px solid rgba(127,224,168,0.3); padding:2px 7px; border-radius:6px; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;">${devIcon} ${escapeHtml(v.page)}</span>`;
+ }).join('') + (count > 3 ? `<span style="font-size:11px; color:#7fe0a8; padding:2px 4px; font-weight:700;">+${count - 3}</span>` : '');
+ }
+ }
+
+ const elInsightsLiveTs = document.getElementById('insightsLiveTimestamp');
+ if (elInsightsLiveTs) {
+ const timeStr = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+ elInsightsLiveTs.textContent = `Stand: ${timeStr} · Live`;
+ }
+
+ const elSummary = document.getElementById('livePresenceSummary');
+ if (elSummary) {
+ const timeStr = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+ elSummary.textContent = `Stand: ${timeStr} · aktualisiert sich live`;
+ }
+
+ // Visitors List in Banner (falls noch vorhanden)
+ const emptyEl = document.getElementById('liveVisitorsEmpty');
+ const listEl = document.getElementById('liveVisitorsList');
+ if (emptyEl && listEl) {
+ if (count === 0) {
+ emptyEl.style.display = 'flex';
+ listEl.style.display = 'none';
+ listEl.innerHTML = '';
+ } else {
+ emptyEl.style.display = 'none';
+ listEl.style.display = 'flex';
+
+ listEl.innerHTML = activeVisitors.map(v => {
+ let iconSvg = '';
+ if (v.device === 'mobile') {
+ iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
+ } else if (v.device === 'tablet') {
+ iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
+ } else {
+ iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+ }
+
+ const secAgo = v.lastSeenAgoSec;
+ const timeText = secAgo < 60 ? `vor ${secAgo}s` : `vor ${Math.round(secAgo/60)} Min.`;
+
+ return `
+ <div style="display:inline-flex; align-items:center; gap:9px; padding:7px 14px; background:rgba(255,255,255,0.06); border:1px solid rgba(127,224,168,0.28); border-radius:100px; font-size:12.5px; color:#f0f4fc; box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+ <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:rgba(127,224,168,0.18); color:#7fe0a8; flex-shrink:0;">
+ ${iconSvg}
+ </span>
+ <span style="font-weight:700; color:#fff;">${escapeHtml(v.page)}</span>
+ <span style="color:#9aa7c2; font-size:11.5px;">• ${escapeHtml(v.os)} (${escapeHtml(v.browser)})</span>
+ <span style="background:rgba(127,224,168,0.15); color:#7fe0a8; border:1px solid rgba(127,224,168,0.3); padding:2px 8px; border-radius:100px; font-size:11px; font-weight:700; white-space:nowrap;">${timeText}</span>
+ </div>
+ `;
+ }).join('');
+ }
+ }
+
+ // Wenn aktuell das Live-Modal geöffnet ist, Daten live im Modal aktualisieren!
+ if (currentModalWidget === 'live') {
+ renderModalLivePresence(activeVisitors);
+ }
+ }
+
+ setInterval(renderLivePresence, 4000);
+
+ async function triggerPresenceCleanup(){
+ if (!auth.currentUser) return;
+ const now = Date.now();
+ if (now - lastPresenceCleanup < 3 * 60 * 1000) return;
+ lastPresenceCleanup = now;
+
+ const tenMinAgo = now - 10 * 60 * 1000;
+ const toDelete = allPresenceEvents.filter(ev => {
+ const d = tsToDate(ev.createdAt);
+ return d && d.getTime() < tenMinAgo;
+ }).slice(0, 30);
+
+ if (toDelete.length > 0) {
+ try {
+ const batch = writeBatch(db);
+ toDelete.forEach(item => batch.delete(doc(db, 'vorabstimmung', item.id)));
+ await batch.commit();
+ } catch(e) {}
+ }
+ }
+
+ // --- Vorabstimmung (Poll) ---
+ let allPolls = [];
+ let activePollFilter = 'all'; // 'all', 'yes', 'no'
+
+ // Führt Daten aus der Collection 'vorabstimmung' und eventuelle Fallback-Einträge aus 'ratings' zusammen
+ function getEffectivePolls(){
+ const map = new Map();
+ // 1. Einträge aus 'vorabstimmung' (ohne Seitenaufrufe/Pageviews & Live-Präsenz)
+ allPolls
+ .filter(p => !['pageview', 'presence', 'presence_leave'].includes(p.type) && (p.name || p.attending !== undefined || p.status))
+ .forEach(p => {
+ map.set(p.id, { ...p, _source: p._source || 'vorabstimmung' });
+ });
+ // 2. Fallback-Einträge aus 'ratings' (falls 'vorabstimmung' noch nicht in den Firebase-Regeln freigeschaltet war)
+ allRatings
+ .filter(r => !['pageview', 'presence', 'presence_leave'].includes(r.type) && (r.context === 'vorabstimmung' || r.type === 'vorabstimmung' || (r.comment && r.comment.includes('[VORABSTIMMUNG]')) || (r.comment && r.comment.includes('[Vorabstimmung]'))))
+ .forEach(r => {
+ if (!map.has(r.id)) {
+ let name = r.pollName || r.name;
+ let isAttending = r.pollAttending !== undefined ? r.pollAttending : (r.attending ?? (r.pollStatus === 'ja' || r.status === 'ja'));
+ let compCount = r.pollCompanionsCount !== undefined ? Number(r.pollCompanionsCount) : (Number(r.companionsCount) || 0);
+ let totalPersons = r.pollTotalPersons || 0;
+ let note = r.pollNote || r.note || '';
+
+ if (r.comment && r.comment.includes('[VORABSTIMMUNG]')) {
+ const raw = r.comment.replace(/^.*?\[VORABSTIMMUNG\]\s*/, '').trim();
+ try {
+ if (raw.startsWith('{')) {
+ const parsed = JSON.parse(raw);
+ if (parsed.name) name = parsed.name;
+ if (parsed.attending !== undefined) isAttending = parsed.attending;
+ if (parsed.companionsCount !== undefined) compCount = Number(parsed.companionsCount) || 0;
+ if (parsed.totalPersons !== undefined) totalPersons = Number(parsed.totalPersons) || 0;
+ if (parsed.note !== undefined) note = parsed.note;
+ }
+ } catch(e) {}
+ } else if (r.comment && r.comment.includes('[Vorabstimmung]')) {
+ const match = r.comment.match(/\[Vorabstimmung\]\s*([^:]+):\s*(Kommt|Kommt nicht)/i);
+ if (match) {
+ name = match[1].trim();
+ isAttending = match[2].toLowerCase() === 'kommt';
+ }
+ }
+
+ if (!name) name = 'Unbekannt';
+ if (!totalPersons) totalPersons = isAttending ? (1 + compCount) : 0;
+
+ map.set(r.id, {
+ id: r.id,
+ name,
+ attending: isAttending,
+ status: isAttending ? 'ja' : 'nein',
+ companionsCount: compCount,
+ totalPersons,
+ note,
+ createdAt: r.createdAt,
+ _source: 'ratings'
+ });
+ }
+ });
+ return Array.from(map.values())
+ .sort((a, b) => (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0));
+ }
+
+ function renderPolls(){
+ const effectivePolls = getEffectivePolls();
+ const tabBadge = document.getElementById('tabPollCount');
+ if (tabBadge) tabBadge.textContent = effectivePolls.length;
+
+ const total = effectivePolls.length;
+ const yesPolls = effectivePolls.filter(p => p.attending === true || p.status === 'ja');
+ const noPolls = effectivePolls.filter(p => p.attending === false || p.status === 'nein');
+ const yesCount = yesPolls.length;
+ const noCount = noPolls.length;
+
+ const yesPct = total > 0 ? Math.round((yesCount / total) * 100) : 0;
+ const noPct = total > 0 ? Math.round((noCount / total) * 100) : 0;
+
+ const totalGuests = yesPolls.reduce((sum, p) => sum + (1 + (Number(p.companionsCount) || 0)), 0);
+ const totalCompanions = yesPolls.reduce((sum, p) => sum + (Number(p.companionsCount) || 0), 0);
+ const avgCompanions = yesCount > 0 ? (totalCompanions / yesCount).toFixed(1) : '0';
+
+ if (document.getElementById('statPollTotal')) document.getElementById('statPollTotal').textContent = total;
+ if (document.getElementById('statPollYes')) document.getElementById('statPollYes').textContent = yesCount;
+ if (document.getElementById('statPollYesPercent')) document.getElementById('statPollYesPercent').textContent = `${yesPct}% aller Stimmen`;
+ if (document.getElementById('statPollNo')) document.getElementById('statPollNo').textContent = noCount;
+ if (document.getElementById('statPollNoPercent')) document.getElementById('statPollNoPercent').textContent = `${noPct}% aller Stimmen`;
+ if (document.getElementById('statPollTotalGuests')) document.getElementById('statPollTotalGuests').textContent = totalGuests;
+ if (document.getElementById('statPollCompanionsSub')) document.getElementById('statPollCompanionsSub').textContent = `${totalCompanions} Begleitung${totalCompanions !== 1 ? 'en' : ''}`;
+ if (document.getElementById('statPollCompanionsTotal')) document.getElementById('statPollCompanionsTotal').textContent = totalCompanions;
+ if (document.getElementById('statPollAvgCompanions')) document.getElementById('statPollAvgCompanions').textContent = `Ø ${avgCompanions} pro Zusage`;
+
+ if (document.getElementById('chipPollAll')) document.getElementById('chipPollAll').textContent = total;
+ if (document.getElementById('chipPollYes')) document.getElementById('chipPollYes').textContent = yesCount;
+ if (document.getElementById('chipPollNo')) document.getElementById('chipPollNo').textContent = noCount;
+
+ const searchVal = (document.getElementById('pollSearch')?.value || '').trim().toLowerCase();
+ const rows = effectivePolls.filter(p => {
+ const matchesSearch = !searchVal ||
+ (p.name || '').toLowerCase().includes(searchVal) ||
+ (p.note || '').toLowerCase().includes(searchVal);
+ if (!matchesSearch) return false;
+
+ if (activePollFilter === 'yes') return p.attending === true || p.status === 'ja';
+ if (activePollFilter === 'no') return p.attending === false || p.status === 'nein';
+ return true;
+ });
+
+ const resBadge = document.getElementById('pollResultsBadge');
+ if (resBadge) {
+ if (searchVal || activePollFilter !== 'all') {
+ resBadge.textContent = `${rows.length} von ${total} angezeigt`;
+ } else {
+ resBadge.textContent = `${total} Rückmeldungen`;
+ }
+ }
+
+ const tbody = document.getElementById('pollTableBody');
+ if (tbody) {
+ if (rows.length === 0) {
+ tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:32px 16px; color:var(--text-dim);">Keine passenden Rückmeldungen gefunden.</td></tr>`;
+ } else {
+ tbody.innerHTML = rows.map(p => {
+ const isYes = p.attending === true || p.status === 'ja';
+ const compCount = Number(p.companionsCount) || 0;
+ const totalP = isYes ? (1 + compCount) : 0;
+ const statusBadge = isYes
+ ? `<span class="badge in" style="font-weight:600; display:inline-flex; align-items:center; gap:5px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px; height:11px;"><polyline points="20 6 9 17 4 12"/></svg><span>Kommt</span></span>`
+ : `<span class="badge out" style="color:var(--error); background:rgba(255,128,128,0.12); font-weight:600; display:inline-flex; align-items:center; gap:5px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px; height:11px;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>Kommt nicht</span></span>`;
+ const compBadge = isYes
+ ? (compCount === 0 ? '<span style="color:var(--text-dim);">Keine (nur selbst)</span>' : `<strong>+${compCount}</strong> Begleitung${compCount > 1 ? 'en' : ''}`)
+ : '<span style="color:var(--text-dim); opacity:0.6;">—</span>';
+ const totalBadge = isYes
+ ? `<strong style="color:var(--accent-glow);">${totalP} Person${totalP > 1 ? 'en' : ''}</strong>`
+ : '<span style="color:var(--text-dim); opacity:0.6;">0</span>';
+
+ return `
+ <tr>
+ <td><strong style="color:var(--text); font-size:13.5px;">${escapeHtml(p.name || 'Unbekannt')}</strong></td>
+ <td>${statusBadge}</td>
+ <td>${compBadge}</td>
+ <td>${totalBadge}</td>
+ <td style="color:${p.note ? 'var(--text)' : 'var(--text-dim)'}; font-size:12.5px;">${p.note ? escapeHtml(p.note) : '<span style="opacity:0.5;">—</span>'}</td>
+ <td style="font-size:11.5px; color:var(--text-dim); white-space:nowrap;">${formatTimestamp(p.createdAt)}</td>
+ <td style="text-align:right;">
+ <button type="button" class="delete-btn delete-poll-btn" data-id="${p.id}" data-source="${p._source || 'vorabstimmung'}" title="Eintrag löschen">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+ </button>
+ </td>
+ </tr>
+ `;
+ }).join('');
+
+ tbody.querySelectorAll('.delete-poll-btn').forEach(btn => {
+ btn.addEventListener('click', async () => {
+ const id = btn.dataset.id;
+ const src = btn.dataset.source || 'vorabstimmung';
+ if (!id) return;
+ if (!confirm('Diesen Eintrag aus der Vorabstimmung wirklich löschen?')) return;
+ btn.disabled = true;
+ try {
+ await deleteDoc(doc(db, src, id));
+ showAdminToast('Eintrag gelöscht');
+ } catch(e) {
+ alert('Fehler beim Löschen: ' + e.message);
+ btn.disabled = false;
+ }
+ });
+ });
+ }
+ }
+ }
+
+ function exportPollCsv(){
+ const effectivePolls = getEffectivePolls();
+ if (effectivePolls.length === 0) {
+ alert('Keine Vorabstimmungs-Daten zum Exportieren vorhanden.');
+ return;
+ }
+ const header = ['Name', 'Entscheidung', 'Begleitungen', 'Personen gesamt', 'Klasse / Anmerkung', 'Eingereicht am'];
+ const rows = effectivePolls.map(p => {
+ const isYes = p.attending === true || p.status === 'ja';
+ const comp = Number(p.companionsCount) || 0;
+ return [
+ p.name || '',
+ isYes ? 'Kommt' : 'Kommt nicht',
+ isYes ? comp : 0,
+ isYes ? (1 + comp) : 0,
+ p.note || '',
+ formatTimestamp(p.createdAt)
+ ];
+ });
+ const csv = [header, ...rows].map(row => row.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+ const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+ const url = URL.createObjectURL(blob);
+ const a = document.createElement('a');
+ a.href = url;
+ a.download = `winterball-vorabstimmung_${new Date().toISOString().slice(0,10)}.csv`;
+ a.click();
+ URL.revokeObjectURL(url);
+ }
+
+ const DEFAULT_SCHEDULE = [
+ { time: '17:30', label: 'Einlass', note: 'Ankommen, Garderobe, erste Getränke' },
+ { time: '18:00', label: 'Eröffnung', note: 'Begrüßung und Auftakt des Abends' },
+ { time: '18:30', label: 'Buffet', note: 'Gemeinsames Essen' },
+ { time: '20:00', label: 'Tanz & Programm', note: 'Musik, Überraschungen, gute Laune' },
+ { time: '23:00', label: 'Ausklang', note: 'Gemütlicher Ausklang des Abends' },
+ ];
+
+ // Berechnet die Klassenstufe aus dem Einschulungsjahr am Ende der LernSax-Adresse
+ // (Muster: nachname+vorname-kürzel+einschulungsjahr@schule.lernsax.de)
+ function gradeFromEmail(email){
+ const [local, domain] = String(email || '').toLowerCase().split('@');
+ if (!domain || !domain.endsWith('lernsax.de')) return null;
+ const match = (local || '').match(/(\d{4})$/);
+ if (!match) return null;
+ const enrollYear = Number(match[1]);
+ const grade = (2026 - enrollYear) + 5; // Gymnasium: Einschulung = 5. Klasse, Schuljahr 2026/2027
+ return (grade >= 5 && grade <= 12) ? grade : null;
+ }
+
+ // Wandelt Umlaute/ß in die bei LernSax übliche Schreibweise um (ä->ae, ö->oe, ü->ue, ß->ss)
+ function transliterateForLernSax(str){
+ return str
+ .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue')
+ .replace(/Ä/g,'ae').replace(/Ö/g,'oe').replace(/Ü/g,'ue')
+ .replace(/ß/g,'ss')
+ .toLowerCase()
+ .replace(/[^a-z]/g,'');
+ }
+
+ // Schlägt aus Name + Klassenstufe eine LernSax-Adresse vor, nach dem Muster
+ // nachname + erste 2 Buchstaben vorname + einschulungsjahr@gymwilsdruff.lernsax.de
+ function suggestLernsaxEmail(fullName, klasse){
+ const parts = fullName.trim().split(/\s+/);
+ if (parts.length < 2 || !klasse) return '';
+ const vorname = parts[0];
+ const nachname = parts.slice(1).join('');
+ const enrollYear = 2031 - Number(klasse); // Umkehrung von gradeFromEmail()
+ const localPart = transliterateForLernSax(nachname) + transliterateForLernSax(vorname).slice(0, 2) + enrollYear;
+ return `${localPart}@gymwilsdruff.lernsax.de`;
+ }
+
+ function shouldUseLernSax(email, schoolClass = null){
+ if (!lernsaxThreshold) return false;
+ const [local, domain] = String(email || '').trim().toLowerCase().split('@');
+ if (!domain || (domain !== 'lernsax.de' && !domain.endsWith('.lernsax.de'))) return false;
+
+ // 1. Wenn Klassenstufe angegeben (z.B. "7a", "7", "Klasse 7")
+ if (schoolClass) {
+ const m = String(schoolClass).match(/(\d+)/);
+ if (m) {
+ const g = parseInt(m[1], 10);
+ if (g >= 5 && g <= 12) {
+ return g <= lernsaxThreshold;
+ }
+ }
+ }
+
+ // 2. Klassenstufe aus LernSax-Adresse berechnen
+ const grade = gradeFromEmail(email);
+ if (grade !== null) {
+ return grade <= lernsaxThreshold;
+ }
+
+ return false;
+ }
+
+ function isLernSaxEmail(email){
+ const parts = String(email || '').trim().toLowerCase().split('@');
+ const domain = parts[1] || '';
+ return domain === 'lernsax.de' || domain.endsWith('.lernsax.de');
+ }
+
+ function normalizeMailMethod(val){
+ return (val === 'lernsax' || val === 'brevo') ? val : 'auto';
+ }
+
+ function resolveUseLernSax(reg){
+ if (!isLernSaxEmail(reg?.email)) return false;
+ const mode = normalizeMailMethod(reg?.mailMethod);
+ if (mode === 'lernsax') return true;
+ if (mode === 'brevo') return false;
+ return shouldUseLernSax(reg?.email, reg?.schoolClass);
+ }
+
+ function renderMailChannelBadge(r){
+ const sentHint = r.savedToSent === true
+ ? ` · in ${escapeHtml(r.sentFolder || 'Gesendet')} ✓`
+ : '';
+ if (r.mailVia === 'lernsax') {
+ return `<span class="badge in" style="font-size:9.5px; padding:1px 6px; background:rgba(127,224,168,0.15); color:#7fe0a8; border:1px solid rgba(127,224,168,0.3);" title="Zuletzt über LernSax versendet${sentHint}">LernSax ✉️${sentHint}</span>`;
+ }
+ if (r.mailVia === 'brevo') {
+ return `<span class="badge out" style="font-size:9.5px; padding:1px 6px; color:#8fb4ff; border:1px solid rgba(143,180,255,0.3); background:rgba(143,180,255,0.1);" title="Zuletzt über Brevo versendet">Brevo 🚀</span>`;
+ }
+ return '';
+ }
+
+ function renderMailChannelControls(r){
+ const badgeHtml = renderMailChannelBadge(r);
+ // LernSax-Auswahl & "Über LernSax senden" nur bei echten LernSax-Adressen anzeigen
+ if (!isLernSaxEmail(r?.email)) {
+ return badgeHtml ? `<div class="mail-controls-row">${badgeHtml}</div>` : '';
+ }
+ const mode = normalizeMailMethod(r?.mailMethod);
+ const autoTarget = shouldUseLernSax(r?.email, r?.schoolClass) ? 'LernSax' : 'Brevo';
+ const modeClass = mode === 'lernsax' ? 'mode-lernsax' : (mode === 'brevo' ? 'mode-brevo' : '');
+ return `
+ <div class="mail-controls-row">
+ ${badgeHtml}
+ <select class="mail-channel-select ${modeClass}" data-id="${r.id}" title="Versandweg für diese LernSax-Adresse wählen">
+ <option value="auto"${mode === 'auto' ? ' selected' : ''}>Auto (${autoTarget})</option>
+ <option value="lernsax"${mode === 'lernsax' ? ' selected' : ''}>LernSax ✉️</option>
+ <option value="brevo"${mode === 'brevo' ? ' selected' : ''}>Brevo 🚀</option>
+ </select>
+ <button type="button" class="resend-lernsax-btn" data-id="${r.id}" title="Aktuelle E-Mail (Bestätigung oder Tickets) jetzt direkt über LernSax senden und in Gesendet speichern">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+ <span>Über LernSax senden</span>
+ </button>
+ <button type="button" class="manual-lernsax-btn" data-id="${r.id}" title="Empfänger, Betreff, Text & PDFs für manuellen Versand im LernSax-Webmail öffnen">📋 Manuell</button>
+ </div>`;
+ }
+
+ async function updateRegMailMethod(regId, method){
+ const reg = allRegs.find(r => r.id === regId);
+ if (!reg) return;
+ let normalized = normalizeMailMethod(method);
+ if (!isLernSaxEmail(reg.email) && normalized === 'lernsax') {
+ normalized = 'auto';
+ }
+ try {
+ await updateDoc(doc(db, 'registrations', regId), { mailMethod: normalized });
+ reg.mailMethod = normalized;
+ render();
+ const label = normalized === 'lernsax' ? 'LernSax ✉️' : (normalized === 'brevo' ? 'Brevo 🚀' : 'Automatisch');
+ showAdminToast(`Versandweg für ${reg.name}: ${label}`);
+ } catch (err) {
+ console.error(err);
+ alert('Versandweg konnte nicht gespeichert werden: ' + (err.message || String(err)));
+ }
+ }
+
+ const RESEND_LERNSAX_BTN_CONTENT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><span>Über LernSax senden</span>';
+
+ async function sendOrderMailViaChannel(regId, channel = 'lernsax', btnEl = null){
+ const reg = allRegs.find(r => r.id === regId);
+ if (!reg || !reg.email) {
+ alert('Keine gültige E-Mail-Adresse für diese Bestellung hinterlegt.');
+ return;
+ }
+ if (channel === 'lernsax' && !isLernSaxEmail(reg.email)) {
+ alert('Der Versand über LernSax ist nur für LernSax-E-Mail-Adressen verfügbar.');
+ return;
+ }
+ const tickets = ticketsFor(regId);
+ const paidTickets = tickets.filter(t => t.paid === true);
+ const isTicketMail = !!reg.paid || paidTickets.length > 0;
+ const useLernSax = channel === 'lernsax' ? true : (channel === 'brevo' ? false : resolveUseLernSax(reg));
+ const strictLernSax = channel === 'lernsax';
+
+ if (btnEl) {
+ btnEl.disabled = true;
+ btnEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="animation:spin 0.8s linear infinite;"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg><span>Sende...</span>';
+ }
+
+ try {
+ const salutation = (reg.salutation || (reg.anrede === 'Sie' ? 'sie' : 'du')).toLowerCase();
+ const anrede = salutation === 'sie' ? 'Sie' : 'Du';
+ const greeting = salutation === 'sie' ? `Guten Tag ${reg.name}` : `Hallo ${reg.name}`;
+
+ let res;
+ if (isTicketMail) {
+ const priceSnap = await getDoc(doc(db, 'settings', 'pricing'));
+ const freshPrices = priceSnap.exists()
+ ? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
+ : { u18: 0, ue18: 0 };
+ const idToken = await auth.currentUser.getIdToken();
+ const targetTickets = paidTickets.length > 0 ? paidTickets : tickets;
+ res = await workerFetch('/send-tickets', {
+ method: 'POST',
+ headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+ body: JSON.stringify({
+ email: reg.email,
+ ordererName: reg.name,
+ salutation,
+ anrede,
+ isFormal: salutation === 'sie',
+ formell: salutation === 'sie',
+ greeting,
+ attendees: targetTickets.map(t => ({
+ name: t.name,
+ ticketId: t.ticketId,
+ category: t.category,
+ price: freshPrices[t.category] || 0
+ })),
+ useLernSax,
+ strictLernSax,
+ donation: Number(reg.donation || 0)
+ })
+ });
+ } else {
+ const attendeeNames = tickets.length > 0
+ ? tickets.map(t => t.name)
+ : [reg.name, ...(reg.companions || []).map(c => c.name)].filter(Boolean);
+ res = await workerFetch('/send-confirmation', {
+ method: 'POST',
+ headers: { 'Content-Type': 'application/json' },
+ body: JSON.stringify({
+ name: reg.name,
+ email: reg.email,
+ salutation,
+ anrede,
+ isFormal: salutation === 'sie',
+ formell: salutation === 'sie',
+ greeting,
+ attendeeNames,
+ useLernSax,
+ strictLernSax
+ })
+ });
+ }
+
+ const resData = await res.json().catch(() => ({}));
+ if (!res.ok) {
+ throw new Error(resData.error || `E-Mail konnte nicht gesendet werden (HTTP ${res.status})`);
+ }
+
+ const actualVia = resData.via || (useLernSax ? 'lernsax' : 'brevo');
+ const updatePayload = {
+ mailVia: actualVia,
+ lastMailSentAt: serverTimestamp()
+ };
+ if (channel === 'lernsax' || channel === 'brevo') {
+ updatePayload.mailMethod = channel;
+ reg.mailMethod = channel;
+ }
+ if (typeof resData.savedToSent === 'boolean') {
+ updatePayload.savedToSent = resData.savedToSent;
+ reg.savedToSent = resData.savedToSent;
+ if (resData.sentFolder) {
+ updatePayload.sentFolder = resData.sentFolder;
+ reg.sentFolder = resData.sentFolder;
+ }
+ }
+
+ try {
+ await updateDoc(doc(db, 'registrations', regId), updatePayload);
+ reg.mailVia = actualVia;
+ } catch (_) {}
+
+ render();
+
+ const mailKind = isTicketMail ? 'Ticket-Mail' : 'Bestätigungsmail';
+ if (channel === 'lernsax' && actualVia !== 'lernsax') {
+ openManualLernSaxModal(regId, resData.lernSaxError || 'LernSax-SMTP fehlgeschlagen (Worker ist auf Brevo ausgewichen).');
+ } else if (actualVia === 'lernsax') {
+ if (resData.savedToSent === true) {
+ showAdminToast(`${mailKind} an ${reg.email} über LernSax ✉️ gesendet & in „${resData.sentFolder || 'Gesendet'}“ abgelegt!`);
+ } else if (resData.savedToSent === false) {
+ showAdminToast(`${mailKind} über LernSax ✉️ gesendet (⚠️ Kopie in Gesendet fehlgeschlagen: ${resData.sentError || 'IMAP-Fehler'})`);
+ } else {
+ showAdminToast(`${mailKind} an ${reg.email} über LernSax ✉️ gesendet!`);
+ }
+ } else {
+ showAdminToast(`${mailKind} an ${reg.email} über Brevo 🚀 gesendet!`);
+ }
+ } catch (err) {
+ console.error(err);
+ if (channel === 'lernsax') {
+ openManualLernSaxModal(regId, err.message || String(err));
+ } else {
+ alert('E-Mail-Versand fehlgeschlagen:\n\n' + (err.message || String(err)));
+ }
+ } finally {
+ if (btnEl && document.body.contains(btnEl)) {
+ btnEl.disabled = false;
+ btnEl.innerHTML = RESEND_LERNSAX_BTN_CONTENT;
+ }
+ }
+ }
+
+ let activeManualLernSaxRegId = null;
+
+ function buildManualLernSaxEmailContent(reg){
+  const tickets = ticketsFor(reg.id);
+  const paidTickets = tickets.filter(t => t.paid === true);
+  const isTicketMail = !!reg.paid || paidTickets.length > 0;
+  const formal = (reg.salutation || (reg.anrede === 'Sie' ? 'sie' : 'du')).toLowerCase() === 'sie';
+  const greetingLine = formal ? `Guten Tag ${reg.name},` : `Hallo ${reg.name},`;
+
+  if (isTicketMail) {
+   const targetTickets = paidTickets.length > 0 ? paidTickets : tickets;
+   const plural = targetTickets.length > 1;
+   const list = targetTickets.map(t => `- ${t.name} (Ticket-ID: ${t.ticketId})`).join('\n');
+   const title = formal
+    ? (plural ? `${targetTickets.length} Tickets` : 'Ihr Ticket')
+    : (plural ? `${targetTickets.length} Tickets` : 'Dein Ticket');
+   const ticketsText = formal
+    ? (plural ? 'Ihre Tickets' : 'Ihr Ticket')
+    : (plural ? 'Eure Tickets' : 'Dein Ticket');
+   const forPersonText = formal ? 'Sie' : 'dich';
+   const receiptText = formal ? 'Ihre Quittung liegt' : (plural ? 'Eure Quittung liegt' : 'Deine Quittung liegt');
+   const cancelText = formal
+    ? (plural ? 'Ihre Tickets sind mit der Bezahlung verbindlich gebucht und können nicht mehr storniert oder erstattet werden.' : 'Ihr Ticket ist mit der Bezahlung verbindlich gebucht und kann nicht mehr storniert oder erstattet werden.')
+    : (plural ? 'Eure Tickets sind mit der Bezahlung verbindlich gebucht und können nicht mehr storniert oder erstattet werden.' : 'Dein Ticket ist mit der Bezahlung verbindlich gebucht und kann nicht mehr storniert oder erstattet werden.');
+   const signoff = formal
+    ? 'Wir freuen uns auf Ihren Besuch!\n\nIhre Klassenstufe 12'
+    : `${plural ? 'Wir freuen uns auf euch!' : 'Wir freuen uns auf dich!'}\n\n${plural ? 'Eure Klassenstufe 12' : 'Deine Klassenstufe 12'}`;
+
+   const subject = formal
+    ? (plural ? `✨ Ihre ${targetTickets.length} Tickets für den Winter Ball ✨` : '✨ Ihr Ticket für den Winter Ball ✨')
+    : (plural ? `✨ Eure ${targetTickets.length} Tickets für den Winter Ball ✨` : '✨ Dein Ticket für den Winter Ball ✨');
+
+   const body = `WINTER BALL — ${title}\n\n${greetingLine}\n\n${list}\n\n${ticketsText} mit QR-Code ${plural ? 'liegen' : 'liegt'} dieser Mail als PDF bei. Bitte den passenden Code am Einlass für ${plural ? 'jede Person' : forPersonText} bereithalten. ${receiptText} ebenfalls als PDF bei.\n\nWebsite: https://winterball27.de\n30. Januar 2027 · 17:30 Uhr\n\nHinweis: ${cancelText}\n\n${signoff}\n\nFragen? info@winterball27.de`;
+   return { subject, body, isTicketMail: true, hasTickets: targetTickets.length > 0 };
+  } else {
+   const attendeeNames = tickets.length > 0
+    ? tickets.map(t => t.name)
+    : [reg.name, ...(reg.companions || []).map(c => c.name)].filter(Boolean);
+   const others = attendeeNames.filter(n => n !== reg.name);
+   const plural = attendeeNames.length > 1;
+   const othersLine = others.length ? `\nMit dabei: ${others.join(', ')}\n` : '';
+   const introText = formal
+    ? (plural ? 'Ihre Anmeldungen sind bei uns eingegangen.' : 'Ihre Anmeldung ist bei uns eingegangen.')
+    : (plural ? 'eure Anmeldungen sind bei uns eingegangen.' : 'deine Anmeldung ist bei uns eingegangen.');
+   const payText = formal
+    ? `Bitte bezahlen Sie ${plural ? 'die Tickets' : 'Ihr Ticket'} bar an der Vorverkaufskasse in der Schule.\nSobald das erledigt ist, erhalten Sie ${plural ? 'die Tickets' : 'Ihr Ticket'} mit QR-Code in einer separaten Mail zugeschickt.`
+    : `Bitte bezahle ${plural ? 'die Tickets' : 'dein Ticket'} bar an der Vorverkaufskasse in der Schule.\nSobald das erledigt ist, bekommst du ${plural ? 'die Tickets' : 'dein Ticket'} mit QR-Code in einer separaten Mail zugeschickt.`;
+   const signoff = formal
+    ? 'Wir freuen uns auf Ihren Besuch!\n\nIhre Klassenstufe 12'
+    : `${plural ? 'Wir freuen uns auf euch!' : 'Wir freuen uns auf dich!'}\n\n${plural ? 'Eure Klassenstufe 12' : 'Deine Klassenstufe 12'}`;
+
+   const subject = '✨ Anmeldung zum Winter Ball eingegangen ✨';
+   const body = `WINTER BALL — Anmeldung eingegangen\n\n${greetingLine}\n\n${introText}${othersLine}\n${payText}\n\nWebsite: https://winterball27.de\n30. Januar 2027 · 17:30 Uhr\n\n${signoff}\n\nFragen? info@winterball27.de`;
+   return { subject, body, isTicketMail: false, hasTickets: tickets.length > 0 };
+  }
+ }
+
+ function openManualLernSaxModal(regId, errorMsg = ''){
+  const reg = allRegs.find(r => r.id === regId);
+  if (!reg) return;
+  activeManualLernSaxRegId = regId;
+
+  const { subject, body, isTicketMail, hasTickets } = buildManualLernSaxEmailContent(reg);
+  const subEl = document.getElementById('manualLernSaxSubtitle');
+  const errBox = document.getElementById('manualLernSaxErrorBox');
+  const toInp = document.getElementById('manualLernSaxToInput');
+  const subjInp = document.getElementById('manualLernSaxSubjectInput');
+  const bodyInp = document.getElementById('manualLernSaxBodyInput');
+  const pdfBtn = document.getElementById('manualLernSaxPdfBtn');
+  const invBtn = document.getElementById('manualLernSaxInvoiceBtn');
+  const overlay = document.getElementById('manualLernSaxModalOverlay');
+
+  if (subEl) {
+   subEl.textContent = `${reg.name} · ${isTicketMail ? 'Ticket-Mail (bezahlt)' : 'Anmelde-Bestätigung (offen)'}`;
+  }
+  if (errBox) {
+   if (errorMsg) {
+    const is550 = /550|unknown/i.test(errorMsg);
+    errBox.innerHTML = `<strong>Automatischer LernSax-SMTP-Versand fehlgeschlagen:</strong><br>${escapeHtml(errorMsg)}${is550 ? '<br><br><span style="color:#fff;">Dieses LernSax-Schülerkonto lässt nur interne LernSax-Nachrichten zu. Kopiere Empfänger, Betreff &amp; Text unten und sende sie direkt im LernSax-Webmail.</span>' : ''}`;
+    errBox.classList.add('show');
+   } else {
+    errBox.classList.remove('show');
+    errBox.innerHTML = '';
+   }
+  }
+  if (toInp) toInp.value = reg.email || '';
+  if (subjInp) subjInp.value = subject;
+  if (bodyInp) bodyInp.value = body;
+  if (pdfBtn) pdfBtn.style.display = (isTicketMail && hasTickets) ? 'inline-flex' : 'none';
+  if (invBtn) invBtn.style.display = (isTicketMail && hasTickets) ? 'inline-flex' : 'none';
+  if (overlay) overlay.classList.add('show');
+ }
+
+ function closeManualLernSaxModal(){
+  document.getElementById('manualLernSaxModalOverlay')?.classList.remove('show');
+  activeManualLernSaxRegId = null;
+ }
+
+ document.getElementById('manualLernSaxCloseTopBtn')?.addEventListener('click', closeManualLernSaxModal);
+ document.getElementById('manualLernSaxCancelBtn')?.addEventListener('click', closeManualLernSaxModal);
+ document.getElementById('manualLernSaxModalOverlay')?.addEventListener('click', (e) => {
+  if (e.target.id === 'manualLernSaxModalOverlay') closeManualLernSaxModal();
+ });
+ document.querySelectorAll('#manualLernSaxModalOverlay .manual-copy-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+   const target = document.getElementById(btn.dataset.copyTarget);
+   const val = target?.value || '';
+   if (!val) return;
+   try {
+    await navigator.clipboard.writeText(val);
+    const orig = btn.textContent;
+    btn.textContent = 'Kopiert ✓';
+    setTimeout(() => { btn.textContent = orig; }, 1600);
+   } catch (_) {
+    target?.select();
+    showAdminToast('Bitte Text markiert kopieren (Strg+C / Cmd+C).');
+   }
+  });
+ });
+ document.getElementById('manualLernSaxPdfBtn')?.addEventListener('click', (e) => {
+  if (activeManualLernSaxRegId) downloadTicketsPdf(activeManualLernSaxRegId, e.currentTarget);
+ });
+ document.getElementById('manualLernSaxInvoiceBtn')?.addEventListener('click', (e) => {
+  if (activeManualLernSaxRegId) downloadInvoicePdf(activeManualLernSaxRegId, e.currentTarget);
+ });
+ document.getElementById('manualLernSaxMarkSentBtn')?.addEventListener('click', async () => {
+  if (!activeManualLernSaxRegId) return;
+  const reg = allRegs.find(r => r.id === activeManualLernSaxRegId);
+  if (!reg) return;
+  const tickets = ticketsFor(reg.id);
+  const isTicketMail = !!reg.paid || tickets.some(t => t.paid === true);
+  const payload = {
+   mailVia: 'lernsax',
+   savedToSent: true,
+   sentFolder: 'Manuell (Webmail)',
+   manualLernSaxSentAt: serverTimestamp(),
+   lastMailSentAt: serverTimestamp()
+  };
+  if (isTicketMail) payload.ticketSentAt = serverTimestamp();
+  else payload.confirmationSentAt = serverTimestamp();
+  try {
+   await updateDoc(doc(db, 'registrations', reg.id), payload);
+   reg.mailVia = 'lernsax';
+   reg.savedToSent = true;
+   reg.sentFolder = 'Manuell (Webmail)';
+   render();
+   closeManualLernSaxModal();
+   showAdminToast(`${reg.name} als manuell über LernSax versendet markiert ✓`);
+  } catch (err) {
+   console.error(err);
+   alert('Status konnte nicht gespeichert werden: ' + (err.message || String(err)));
+  }
+ });
+
+ onAuthStateChanged(auth, (user) => {
+ document.getElementById('loginCard').style.display = user ? 'none' : 'block';
+ document.getElementById('dashboard').style.display = user ? 'block' : 'none';
+ if(user) {
+  if (typeof switchToTab === 'function') switchToTab('orders');
+  startListening();
+ }
+ });
+
+ async function performLogin() {
+ const emailEl = document.getElementById('loginEmail');
+ const passEl = document.getElementById('loginPass');
+ const errorEl = document.getElementById('loginError');
+ const btn = document.getElementById('loginBtn');
+ const email = (emailEl?.value || '').trim();
+ const pass = passEl?.value || '';
+
+ if (!email || !pass) {
+ if (errorEl) {
+ errorEl.textContent = 'Bitte gib E-Mail und Passwort ein.';
+ errorEl.style.display = 'block';
+ }
+ return;
+ }
+
+ if (btn) {
+ btn.disabled = true;
+ btn.textContent = 'Anmeldung läuft...';
+ }
+ if (errorEl) errorEl.style.display = 'none';
+
+ try {
+ await signInWithEmailAndPassword(auth, email, pass);
+ } catch(e) {
+ console.error('Login error:', e);
+ let msg = 'Login fehlgeschlagen.';
+ if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found') {
+ msg = 'E-Mail oder Passwort ist nicht korrekt.';
+ } else if (e.code === 'auth/invalid-email') {
+ msg = 'Ungültiges E-Mail-Format.';
+ } else if (e.code === 'auth/network-request-failed') {
+ msg = 'Netzwerkfehler: Verbindung zum Server fehlgeschlagen.';
+ } else if (e.message) {
+ msg = 'Fehler: ' + e.message;
+ }
+ if (errorEl) {
+ errorEl.textContent = msg;
+ errorEl.style.display = 'block';
+ }
+ } finally {
+ if (btn) {
+ btn.disabled = false;
+ btn.textContent = 'Anmelden';
+ }
+ }
+ }
+
+ const loginBtn = document.getElementById('loginBtn');
+ if (loginBtn) loginBtn.addEventListener('click', performLogin);
+
+ const loginEmailInp = document.getElementById('loginEmail');
+ if (loginEmailInp) {
+ loginEmailInp.addEventListener('keydown', (e) => {
+ if (e.key === 'Enter') {
+ e.preventDefault();
+ document.getElementById('loginPass')?.focus();
+ }
+ });
+ }
+ const loginPassInp = document.getElementById('loginPass');
+ if (loginPassInp) {
+ loginPassInp.addEventListener('keydown', (e) => {
+ if (e.key === 'Enter') {
+ e.preventDefault();
+ performLogin();
+ }
+ });
+ }
+
+ document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
+
+	function switchToTab(tabName){
+		const isMobile = window.innerWidth <= 860;
+		if (isMobile && tabName === 'cashier') {
+			tabName = 'orders';
+		}
+
+		document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+		document.querySelectorAll('.mobile-nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+		document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.dataset.tabContent === tabName));
+		
+		// Am Handy: Schnellstatistiken NUR im Insights-Tab sichtbar
+		document.body.classList.toggle('mobile-tab-insights', isMobile && tabName === 'insights');
+		const globalStats = document.getElementById('globalStatsBar');
+		if (globalStats) {
+			if (isMobile) {
+				globalStats.style.display = (tabName === 'insights') ? 'grid' : 'none';
+			} else {
+				globalStats.style.display = (tabName === 'insights') ? 'none' : 'grid';
+			}
+		}
+		if (tabName === 'cashier') {
+			renderCashier();
+			setTimeout(() => {
+				const inp = document.getElementById('cashierSearch');
+				if (inp) inp.focus();
+			}, 50);
+		}
+		if (tabName === 'guestlist') {
+			renderGuestList();
+		}
+		if (tabName === 'insights') {
+			updateCharts();
+			renderLivePresence();
+		}
+		if (tabName === 'ratings') renderRatings();
+		if (tabName === 'poll') renderPolls();
+	}
+
+	window.addEventListener('resize', () => {
+		const isMobile = window.innerWidth <= 860;
+		const activeTab = document.querySelector('.tab-content.active')?.dataset?.tabContent || 'orders';
+		document.body.classList.toggle('mobile-tab-insights', isMobile && activeTab === 'insights');
+		const globalStats = document.getElementById('globalStatsBar');
+		if (globalStats) {
+			if (isMobile) {
+				globalStats.style.display = (activeTab === 'insights') ? 'grid' : 'none';
+			} else {
+				globalStats.style.display = (activeTab === 'insights') ? 'none' : 'grid';
+			}
+		}
+	});
+ document.querySelectorAll('.tab-btn').forEach(btn => {
+ btn.addEventListener('click', () => switchToTab(btn.dataset.tab));
+ });
+
+ // Mobile Native App Navigation & "Mehr" Sheet Logic
+ function initMobileNavigation() {
+ document.querySelectorAll('.mobile-nav-item[data-tab]').forEach(btn => {
+ btn.addEventListener('click', () => {
+ switchToTab(btn.dataset.tab);
+ window.scrollTo({ top: 0, behavior: 'smooth' });
+ });
+ });
+
+ const moreSheet = document.getElementById('mobileMoreSheet');
+ const moreBtn = document.getElementById('mobileMoreBtn');
+ const moreCloseBtn = document.getElementById('mobileMoreCloseBtn');
+
+ function openMoreSheet() {
+ moreSheet?.classList.add('show');
+ document.body.style.overflow = 'hidden';
+ }
+ function closeMoreSheet() {
+ moreSheet?.classList.remove('show');
+ document.body.style.overflow = '';
+ }
+
+ moreBtn?.addEventListener('click', openMoreSheet);
+ moreCloseBtn?.addEventListener('click', closeMoreSheet);
+ moreSheet?.addEventListener('click', (e) => {
+ if (e.target === moreSheet) closeMoreSheet();
+ });
+
+ document.querySelectorAll('.mobile-more-item[data-action]').forEach(item => {
+ item.addEventListener('click', () => {
+ const action = item.dataset.action;
+ closeMoreSheet();
+ if (action === 'tab-settings') {
+ switchToTab('settings');
+ window.scrollTo({ top: 0, behavior: 'smooth' });
+ } else if (action === 'tab-ratings') {
+ switchToTab('ratings');
+ window.scrollTo({ top: 0, behavior: 'smooth' });
+ } else if (action === 'kassensturz') {
+ document.getElementById('headerKassensturzBtn')?.click();
+ } else if (action === 'emergency-print') {
+ document.getElementById('headerEmergencyPrintBtn')?.click();
+ } else if (action === 'pwa-install') {
+ document.getElementById('headerPwaInstallBtn')?.click();
+ } else if (action === 'refresh') {
+ document.getElementById('headerRefreshBtn')?.click();
+ } else if (action === 'logout') {
+ signOut(auth);
+ }
+ });
+ });
+ }
+ initMobileNavigation();
+
+ // PWA Installation & Service Worker Logic
+ let deferredPwaPrompt = null;
+ const isIosDevice = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+ const isAppStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator.standalone === true);
+
+ function initPwaInstall() {
+ const banner = document.getElementById('mobilePwaBanner');
+ const headerBtn = document.getElementById('headerPwaInstallBtn');
+ const moreItem = document.getElementById('mobileMoreInstallItem');
+
+ if (isAppStandalone) {
+ if (banner) banner.style.display = 'none';
+ if (headerBtn) headerBtn.style.display = 'none';
+ if (moreItem) moreItem.style.display = 'none';
+ return;
+ }
+
+ const dismissed = sessionStorage.getItem('wb_pwa_banner_dismissed');
+ if (banner && !dismissed && window.innerWidth <= 860) {
+ banner.classList.add('show');
+ }
+
+ window.addEventListener('beforeinstallprompt', (e) => {
+ e.preventDefault();
+ deferredPwaPrompt = e;
+ if (banner && !sessionStorage.getItem('wb_pwa_banner_dismissed')) {
+ banner.classList.add('show');
+ }
+ if (headerBtn) headerBtn.style.display = 'inline-flex';
+ });
+
+ window.addEventListener('appinstalled', () => {
+ deferredPwaPrompt = null;
+ if (banner) banner.classList.remove('show');
+ if (headerBtn) headerBtn.style.display = 'none';
+ if (moreItem) moreItem.style.display = 'none';
+ showAdminToast('Winterball Admin erfolgreich als App installiert! 🎉');
+ });
+
+ async function triggerInstallFlow() {
+ if (deferredPwaPrompt) {
+ deferredPwaPrompt.prompt();
+ const choice = await deferredPwaPrompt.userChoice;
+ if (choice && choice.outcome === 'accepted') {
+ deferredPwaPrompt = null;
+ if (banner) banner.classList.remove('show');
+ }
+ } else if (isIosDevice) {
+ document.getElementById('iosInstallModal')?.classList.add('show');
+ } else {
+ alert('Tippe im Browser-Menü (oben rechts ⋮) auf „App installieren“ oder „Zum Startbildschirm hinzufügen“.');
+ }
+ }
+
+ headerBtn?.addEventListener('click', triggerInstallFlow);
+ document.getElementById('pwaBannerInstallBtn')?.addEventListener('click', triggerInstallFlow);
+ document.getElementById('pwaBannerCloseBtn')?.addEventListener('click', () => {
+ banner?.classList.remove('show');
+ sessionStorage.setItem('wb_pwa_banner_dismissed', '1');
+ });
+
+ document.getElementById('iosModalCloseBtn')?.addEventListener('click', () => {
+ document.getElementById('iosInstallModal')?.classList.remove('show');
+ });
+ document.getElementById('iosInstallModal')?.addEventListener('click', (e) => {
+ if (e.target === document.getElementById('iosInstallModal')) {
+ document.getElementById('iosInstallModal')?.classList.remove('show');
+ }
+ });
+ }
+ initPwaInstall();
+
+ // Service Worker Registration
+ if ('serviceWorker' in navigator) {
+ window.addEventListener('load', () => {
+ navigator.serviceWorker.register('/sw.js').catch((err) => {
+ console.warn('PWA ServiceWorker Registration:', err);
+ });
+ });
+ }
+
+ // Klick auf Widget-Kacheln öffnet vergrößertes Detail-Modal
+ document.querySelectorAll('.widget-card').forEach(card => {
+ card.addEventListener('click', () => {
+ const widgetType = card.dataset.widget;
+ if (widgetType) openWidgetModal(widgetType);
+ });
+ });
+
+ // Modal-Schließen Event-Listener
+ document.getElementById('modalWidgetCloseBtn')?.addEventListener('click', closeWidgetModal);
+ document.getElementById('widgetModal')?.addEventListener('click', (e) => {
+ if (e.target === document.getElementById('widgetModal')) closeWidgetModal();
+ });
+ window.addEventListener('keydown', (e) => {
+ if (e.key === 'Escape' && currentModalWidget) closeWidgetModal();
+ });
+
+ // Klick auf Live-Besucher-Pille im Header
+ document.getElementById('headerLiveVisitors')?.addEventListener('click', () => {
+ switchToTab('insights');
+ openWidgetModal('live');
+ });
+
+ function startListening(){
+ const onErr = (name) => (err) => console.warn(`Listener ${name}:`, err ? (err.message || err.code || 'Snapshot-Fehler') : 'Fehler');
+
+ onSnapshot(query(collection(db, 'registrations'), orderBy('createdAt', 'desc')), (snap) => {
+ allRegs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+ scheduleRender();
+ scheduleCharts();
+ }, onErr('registrations'));
+
+ onSnapshot(collection(db, 'tickets'), (snap) => {
+ allTickets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+ scheduleRender();
+ syncStatsCounter();
+ scheduleCharts();
+ }, onErr('tickets'));
+
+ onSnapshot(collection(db, 'ratings'), (snap) => {
+ allRatings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+ renderRatings();
+ renderPolls();
+ }, onErr('ratings'));
+
+ onSnapshot(query(collection(db, 'vorabstimmung'), orderBy('createdAt', 'desc')), (snap) => {
+ const raw = snap.docs.map(d => ({ id: d.id, ...d.data(), _source: 'vorabstimmung' }));
+ allPolls = raw.filter(d => !['pageview', 'presence', 'presence_leave'].includes(d.type) && (d.name || d.attending !== undefined || d.status));
+ allPageviews = raw.filter(d => d.type === 'pageview');
+ allPresenceEvents = raw.filter(d => d.type === 'presence' || d.type === 'presence_leave');
+ renderPolls();
+ scheduleCharts();
+ renderLivePresence();
+ triggerPresenceCleanup();
+ }, onErr('vorabstimmung'));
+
+ onSnapshot(doc(db, 'settings', 'pricing'), (snap) => {
+ const data = snap.exists() ? snap.data() : {};
+ const u18Val = parseMoneyNumber(data.u18, 10);
+ const ue18Val = parseMoneyNumber(data.ue18, 15);
+ ticketPrices = {
+ u18: u18Val > 0 ? u18Val : 10,
+ ue18: ue18Val > 0 ? ue18Val : 15
+ };
+ const pU18El = document.getElementById('priceU18Input');
+ if (pU18El) pU18El.value = ticketPrices.u18 || '';
+ const pUe18El = document.getElementById('priceUe18Input');
+ if (pUe18El) pUe18El.value = ticketPrices.ue18 || '';
+ scheduleRender();
+ scheduleCharts();
+ }, onErr('pricing'));
+
+ onSnapshot(doc(db, 'settings', 'maintenance'), (snap) => {
+			const data = snap.exists() ? snap.data() : {};
+			const enabled = !!data.enabled;
+			const msg = data.message || '';
+			const updated = data.updatedAt ? tsToDate(data.updatedAt) : null;
+			updateMaintenanceUI(enabled, msg, updated);
+		}, onErr('maintenance'));
+
+		onSnapshot(doc(db, 'settings', 'info'), (snap) => {
+ document.getElementById('infoText').value = snap.exists() ? (snap.data().text || '') : '';
+ }, onErr('info'));
+
+ onSnapshot(doc(db, 'settings', 'deadline'), (snap) => {
+ const iso = snap.exists() ? snap.data().timestamp : null;
+ document.getElementById('deadlineInput').value = iso ? isoToLocalInputValue(iso) : '';
+ }, onErr('deadline'));
+
+ onSnapshot(doc(db, 'settings', 'opensAt'), (snap) => {
+ const iso = snap.exists() ? snap.data().timestamp : null;
+ document.getElementById('opensAtInput').value = iso ? isoToLocalInputValue(iso) : '';
+ }, onErr('opensAt'));
+
+ onSnapshot(doc(db, 'settings', 'lernsaxThreshold'), (snap) => {
+ const grade = snap.exists() ? snap.data().grade : null;
+ document.getElementById('lernsaxThresholdInput').value = grade || '';
+ lernsaxThreshold = grade || null;
+ }, onErr('lernsaxThreshold'));
+
+ onSnapshot(doc(db, 'settings', 'capacity'), (snap) => {
+ const max = snap.exists() ? snap.data().maxTickets : null;
+ if (document.getElementById('maxTicketsInput')) document.getElementById('maxTicketsInput').value = max || '';
+ if (max && Number(max) > 0) {
+   currentHallCapacity = Number(max);
+   localStorage.setItem('wb27_hall_capacity', String(max));
+   scheduleCharts();
+ }
+ }, onErr('capacity'));
+
+ onSnapshot(doc(db, 'settings', 'schedule'), (snap) => {
+ // Nur beim allerersten Laden rendern, damit ein laufender Bearbeitungsvorgang
+ // (z.B. neue, noch leere Zeile) nicht durch den Snapshot überschrieben wird.
+ if (scheduleLoaded) return;
+ scheduleLoaded = true;
+ const items = (snap.exists() && Array.isArray(snap.data().items) && snap.data().items.length)
+ ? snap.data().items : DEFAULT_SCHEDULE;
+ renderScheduleRows(items);
+ }, onErr('schedule'));
+ }
+
+ function isoToLocalInputValue(iso){
+ const d = new Date(iso);
+ const pad = n => String(n).padStart(2, '0');
+ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+ }
+
+ function ticketsFor(regId){
+ return allTickets.filter(t => t.registrationId === regId);
+ }
+
+ function categoryLabel(cat){
+ return cat === 'u18' ? 'U18' : cat === 'ue18' ? 'Ü18' : '';
+ }
+
+ let activeFilter = 'all'; // 'all', 'unpaid', 'paid', 'checkedin', 'notcheckedin'
+
+	function showAdminToast(msg, isSuccess = true, duration = 4000){
+		const toast = document.getElementById('adminToast');
+		if (!toast) return;
+		toast.textContent = msg;
+		toast.className = 'admin-toast show ' + (isSuccess ? 'success' : '');
+		clearTimeout(toast._timer);
+		toast._timer = setTimeout(() => {
+			toast.classList.remove('show');
+		}, duration);
+	}
+
+ function playCheckinChime(){
+ try {
+ const AudioContext = window.AudioContext || window.webkitAudioContext;
+ if (!AudioContext) return;
+ const ctx = new AudioContext();
+ const osc = ctx.createOscillator();
+ const gain = ctx.createGain();
+ osc.connect(gain);
+ gain.connect(ctx.destination);
+ osc.type = 'sine';
+ osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+ osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
+ gain.gain.setValueAtTime(0.08, ctx.currentTime);
+ gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+ osc.start();
+ osc.stop(ctx.currentTime + 0.22);
+ } catch(e){}
+ }
+
+ function render(){
+ const searchInput = document.getElementById('search');
+ const term = (searchInput ? searchInput.value : '').trim().toLowerCase();
+
+ // Toggle search clear button
+ const clearBtn = document.getElementById('searchClearBtn');
+ if (clearBtn) {
+ clearBtn.style.display = term ? 'flex' : 'none';
+ }
+
+ // Filter computation
+ const rows = allRegs.filter(r => {
+ const tickets = ticketsFor(r.id);
+ const matchesSearch = !term ||
+ (r.name || '').toLowerCase().includes(term) ||
+ (r.email || '').toLowerCase().includes(term) ||
+ (r.schoolClass || '').toLowerCase().includes(term) ||
+ (r.companions || []).some(c => (c.name || '').toLowerCase().includes(term) || (c.schoolClass || '').toLowerCase().includes(term)) ||
+ tickets.some(t =>
+ (t.name || '').toLowerCase().includes(term) ||
+ (t.ticketId || '').toLowerCase().includes(term) ||
+ (t.schoolClass || '').toLowerCase().includes(term) ||
+ t.id.toLowerCase().includes(term)
+ );
+
+ if (!matchesSearch) return false;
+
+ if (activeFilter === 'unpaid') return !r.paid;
+ if (activeFilter === 'paid') return !!r.paid;
+ if (activeFilter === 'checkedin') return tickets.some(t => t.checkedIn);
+ if (activeFilter === 'notcheckedin') return tickets.some(t => !t.checkedIn);
+ return true;
+ });
+
+ // Update Filter Chip counts
+ const countAll = allRegs.length;
+ const countUnpaid = allRegs.filter(r => !r.paid).length;
+ const countPaid = allRegs.filter(r => r.paid).length;
+ const countCheckedIn = allTickets.filter(t => t.checkedIn).length;
+ const countNotCheckedIn = allTickets.filter(t => !t.checkedIn).length;
+
+ if (document.getElementById('chipCountAll')) document.getElementById('chipCountAll').textContent = countAll;
+ if (document.getElementById('chipCountUnpaid')) document.getElementById('chipCountUnpaid').textContent = countUnpaid;
+ if (document.getElementById('chipCountPaid')) document.getElementById('chipCountPaid').textContent = countPaid;
+ if (document.getElementById('chipCountCheckedIn')) document.getElementById('chipCountCheckedIn').textContent = countCheckedIn;
+ if (document.getElementById('chipCountNotCheckedIn')) document.getElementById('chipCountNotCheckedIn').textContent = countNotCheckedIn;
+
+ // Results badge
+ const resBadge = document.getElementById('resultsBadge');
+ if (resBadge) {
+ if (term || activeFilter !== 'all') {
+ resBadge.textContent = `${rows.length} von ${allRegs.length} angezeigt`;
+ } else {
+ resBadge.textContent = `${allRegs.length} Bestellungen`;
+ }
+ }
+
+ // Tab orders badge
+ const tabOrdersBadge = document.getElementById('tabOrdersCount');
+ if (tabOrdersBadge) tabOrdersBadge.textContent = allRegs.length;
+ const mobOrdersBadge = document.getElementById('mobileBadgeOrders');
+ if (mobOrdersBadge) mobOrdersBadge.textContent = allRegs.length;
+ const mobGuestsBadge = document.getElementById('mobileBadgeGuests');
+ if (mobGuestsBadge) mobGuestsBadge.textContent = allTickets.length;
+
+ // 1) Desktop Table View
+ const tbody = document.getElementById('tableBody');
+ if (tbody) {
+ if (rows.length === 0) {
+ tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:32px 16px; color:var(--text-dim);">Keine passenden Bestellungen gefunden.</td></tr>`;
+ } else {
+ tbody.innerHTML = rows.map(r => {
+ const tickets = ticketsFor(r.id);
+ const hasExplicitlyPaid = tickets.some(t => t.paid === true);
+ const hasUnpaid = tickets.some(t => !t.paid);
+ const isPartial = hasExplicitlyPaid && hasUnpaid;
+ const dueCents = ticketsDueCents(r.id);
+ const paidCount = tickets.filter(t => t.paid).length;
+
+ const salutationBadge = (r.salutation === 'sie' || r.anrede === 'Sie')
+ ? '<span class="badge out" style="color:#c4b5fd; border-color:rgba(196,181,253,0.35); background:rgba(196,181,253,0.12); font-weight:700;" title="Anrede: Sie (formell)">Sie</span>'
+ : '<span class="badge out" style="color:var(--text-dim); border-color:rgba(255,255,255,0.12); background:rgba(255,255,255,0.03);" title="Anrede: Du (persönlich)">Du</span>';
+
+ const ordererClassBadge = (r.category === 'u18' && r.schoolClass)
+ ? `<span class="badge out" style="color:var(--accent-glow); border-color:rgba(143,180,255,0.35); background:rgba(143,180,255,0.12);" title="Klasse: ${escapeHtml(r.schoolClass)}">Kl. ${escapeHtml(r.schoolClass)}</span>`
+ : '';
+
+ const companionsHtml = (r.companions||[]).length
+ ? `<ul class="attendee-list">${r.companions.map(c => `<li>${escapeHtml(c.name)} <span class="badge out">${categoryLabel(c.category)}</span>${c.category === 'u18' && c.schoolClass ? ` <span class="badge out" style="color:var(--accent-glow); border-color:rgba(143,180,255,0.35); background:rgba(143,180,255,0.12);">Kl. ${escapeHtml(c.schoolClass)}</span>` : ''}</li>`).join('')}</ul>`
+ : '<span style="color:var(--text-dim)">—</span>';
+
+ const ticketsHtml = tickets.length
+ ? `<ul class="ticket-checkin-list">${tickets.map(t => `
+ <li>
+ <span style="display:inline-flex; align-items:center; gap:5px; flex-wrap:wrap;">
+ <span>${escapeHtml(t.name)}</span>
+ ${t.category === 'u18' && (t.schoolClass || (t.name === r.name ? r.schoolClass : null)) ? `<span class="badge out" style="font-size:9.5px; padding:1px 5px; color:var(--accent-glow); border-color:rgba(143,180,255,0.3); background:rgba(143,180,255,0.1);">Kl. ${escapeHtml(t.schoolClass || r.schoolClass)}</span>` : ''}
+ ${!t.paid && hasExplicitlyPaid ? '<span class="badge out" style="font-size:9.5px; padding:1px 5px; color:#ffd27f; border-color:rgba(255,210,127,0.3); background:rgba(255,210,127,0.12);">Offen</span>' : ''}
+ </span>
+ <button class="checkin-toggle ${t.checkedIn ? 'in' : ''}" data-ticket-id="${t.id}" data-name="${escapeHtml(t.name)}" data-state="${t.checkedIn ? '1' : '0'}">
+ ${t.checkedIn
+ ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px; height:11px; margin-right:4px;"><polyline points="20 6 9 17 4 12"/></svg><span>Eingecheckt</span>'
+ : '<span>Einchecken</span>'}
+ </button>
+ </li>`).join('')}</ul>`
+ : '<span style="color:var(--text-dim)">—</span>';
+
+ return `
+ <tr>
+ <td><span class="attendee-list orderer">${escapeHtml(r.name||'')} ${salutationBadge} <span class="badge out">${categoryLabel(r.category)}</span> ${ordererClassBadge}</span></td>
+ <td>
+ ${companionsHtml}
+ <button class="add-companion-btn" data-id="${r.id}" title="Nachträglich eine Begleitung hinzufügen" style="display:inline-flex; align-items:center; gap:4px;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px; height:11px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+ <span>Begleitung</span>
+ </button>
+ </td>
+ <td>
+ <div>${escapeHtml(r.email||'')}</div>
+ ${renderMailChannelControls(r)}
+ </td>
+ <td>${ticketsHtml}</td>
+ <td>
+ <div class="paid-cell">
+ ${r.paid
+ ? `<span class="badge in"> Bezahlt</span>${r.donation > 0 ? ` <span class="badge in" style="background:rgba(255,210,127,0.18); color:#ffd27f; border-color:rgba(255,210,127,0.4); font-size:11px;" title="Freiwillige Spende"><svg viewBox="0 0 24 24" fill="currentColor" style="width:11px; height:11px; vertical-align:middle; margin-right:2px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>+${formatCents(Math.round(r.donation * 100))} Spende</span>` : ''}`
+ : (isPartial
+ ? `<span class="badge out" style="background:rgba(255,210,127,0.15); color:#ffd27f; border:1px solid rgba(255,210,127,0.35); font-size:11px;" title="${paidCount} von ${tickets.length} Tickets bezahlt">${paidCount}/${tickets.length} bezahlt</span>`
+ : `<span class="badge out" style="background:rgba(255,100,100,0.12); color:#ff9494; border:1px solid rgba(255,100,100,0.3);">Offen (${formatCents(dueCents)})</span>`
+ )
+ }
+ ${(r.paid || isPartial) ? `<button class="pdf-btn" data-id="${r.id}" title="Tickets als PDF herunterladen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>PDF</span></button>` : ''}
+ ${(r.paid || isPartial) ? `<button class="invoice-btn" data-id="${r.id}" title="Quittung als PDF herunterladen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg><span>Quittung</span></button>` : ''}
+ </div>
+ </td>
+ <td style="font-size:11px; color:var(--text-dim); white-space:nowrap;">
+ <div>Angemeldet:<br>${formatTimestamp(r.createdAt)}</div>
+ ${r.paid ? `<div style="margin-top:6px;">Bezahlt:<br>${formatTimestamp(r.paidAt)}</div>` : ''}
+ </td>
+ <td>
+ <div style="display:inline-flex; align-items:center; gap:4px;">
+ <button class="edit-reg-btn" data-id="${r.id}" title="Bestellung bearbeiten">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px; height:13px;"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+ </button>
+ <button class="delete-btn" data-id="${r.id}" title="Bestellung löschen">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px; height:13px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+ </button>
+ </div>
+ </td>
+ </tr>`;
+ }).join('');
+ }
+ }
+
+ // 2) Mobile Cards View
+ const mobileCards = document.getElementById('mobileCardsWrap');
+ if (mobileCards) {
+ if (rows.length === 0) {
+ mobileCards.innerHTML = `<div style="text-align:center; padding:32px 16px; color:var(--text-dim); background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius);">Keine passenden Bestellungen gefunden.</div>`;
+ } else {
+ mobileCards.innerHTML = rows.map(r => {
+ const tickets = ticketsFor(r.id);
+ const hasExplicitlyPaid = tickets.some(t => t.paid === true);
+ const hasUnpaid = tickets.some(t => !t.paid);
+ const isPartial = hasExplicitlyPaid && hasUnpaid;
+ const dueCents = ticketsDueCents(r.id);
+ const paidCount = tickets.filter(t => t.paid).length;
+ const checkedCount = tickets.filter(t => t.checkedIn).length;
+ const attendeesList = tickets.map(t => {
+ const tClass = t.schoolClass || (t.name === r.name ? r.schoolClass : null);
+ return `
+ <div class="order-card-attendee">
+ <div>
+ <div style="font-weight:600; color:var(--text); display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+ <span>${escapeHtml(t.name)}</span>
+ ${t.category === 'u18' && tClass ? `<span style="font-size:9.5px; font-weight:700; color:var(--accent-glow); background:rgba(143,180,255,0.15); border:1px solid rgba(143,180,255,0.3); padding:1px 5px; border-radius:4px;">Kl. ${escapeHtml(tClass)}</span>` : ''}
+ ${!t.paid && hasExplicitlyPaid ? '<span style="font-size:9.5px; font-weight:700; color:#ffd27f; background:rgba(255,210,127,0.15); border:1px solid rgba(255,210,127,0.3); padding:1px 5px; border-radius:4px;">Offen</span>' : ''}
+ </div>
+ <div style="font-size:11px; color:var(--text-dim);">${categoryLabel(t.category)}${t.ticketId ? ' · ' + escapeHtml(t.ticketId) : ''}</div>
+ </div>
+ <button class="checkin-toggle ${t.checkedIn ? 'in' : ''}" data-ticket-id="${t.id}" data-name="${escapeHtml(t.name)}" data-state="${t.checkedIn ? '1' : '0'}">
+ ${t.checkedIn
+ ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px; height:11px; margin-right:4px;"><polyline points="20 6 9 17 4 12"/></svg><span>Eingecheckt</span>'
+ : '<span>Einchecken</span>'}
+ </button>
+ </div>
+ `;
+ }).join('');
+
+ const salutationBadge = (r.salutation === 'sie' || r.anrede === 'Sie')
+ ? '<span class="badge out" style="color:#c4b5fd; border-color:rgba(196,181,253,0.35); background:rgba(196,181,253,0.12); font-weight:700;" title="Anrede: Sie (formell)">Sie</span>'
+ : '<span class="badge out" style="color:var(--text-dim); border-color:rgba(255,255,255,0.12); background:rgba(255,255,255,0.03);" title="Anrede: Du (persönlich)">Du</span>';
+
+ return `
+ <div class="order-card" data-id="${r.id}">
+ <div class="order-card-header">
+ <div>
+ <div class="order-card-title">
+ <span>${escapeHtml(r.name || '')}</span>
+ ${salutationBadge}
+ <span class="badge out">${categoryLabel(r.category)}</span>
+ ${r.category === 'u18' && r.schoolClass ? `<span class="badge out" style="color:var(--accent-glow); border-color:rgba(143,180,255,0.35); background:rgba(143,180,255,0.12);">Kl. ${escapeHtml(r.schoolClass)}</span>` : ''}
+ <span class="badge ${r.paid ? 'in' : 'out'}" style="${!r.paid ? 'background:rgba(255,210,127,0.15); color:var(--warn); border:1px solid rgba(255,210,127,0.3);' : ''}">
+ ${r.paid ? ' Bezahlt' : (isPartial ? `${paidCount}/${tickets.length} bezahlt` : `Unbezahlt (${formatCents(dueCents)})`)}
+ </span>
+ </div>
+ <div class="order-card-email">${escapeHtml(r.email || '')}</div>
+ ${renderMailChannelControls(r)}
+ </div>
+ </div>
+
+ <div class="order-card-attendees">
+ <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-dim); display:flex; justify-content:space-between;">
+ <span>Tickets (${tickets.length})</span>
+ <span>${checkedCount}/${tickets.length} da</span>
+ </div>
+ ${attendeesList || '<span style="color:var(--text-dim); font-size:12px;">Keine Tickets</span>'}
+ <button class="add-companion-btn" data-id="${r.id}" style="margin-top:2px; display:inline-flex; align-items:center; gap:4px; align-self:flex-start;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px; height:11px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+ <span>Begleitung hinzufügen</span>
+ </button>
+ </div>
+
+ <div class="order-card-footer">
+ <div style="font-size:11px; color:var(--text-dim);">
+ ${formatTimestamp(r.createdAt)}
+ </div>
+ <div class="order-card-actions">
+ ${(r.paid || isPartial) ? `<button class="pdf-btn" data-id="${r.id}" title="Tickets als PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>PDF</span></button>` : ''}
+ ${(r.paid || isPartial) ? `<button class="invoice-btn" data-id="${r.id}" title="Quittung"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg><span>Quittung</span></button>` : ''}
+ <button class="edit-reg-btn" data-id="${r.id}" title="Bearbeiten" style="margin-right:0;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px; height:13px;"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+ </button>
+ <button class="delete-btn" data-id="${r.id}" title="Löschen">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px; height:13px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+ </button>
+ </div>
+ </div>
+ </div>
+ `;
+ }).join('');
+ }
+ }
+
+ // Stats calculations
+ document.getElementById('statOrders').textContent = allRegs.length;
+ document.getElementById('statTickets').textContent = allTickets.length;
+ document.getElementById('statPaid').textContent = countPaid;
+ if (document.getElementById('statPaidSub')) {
+ document.getElementById('statPaidSub').textContent = `${countUnpaid} noch unbezahlt`;
+ }
+ document.getElementById('statCheckedIn').textContent = countCheckedIn;
+
+ // Checkin progress bar & percentage
+ const checkinPct = allTickets.length > 0 ? Math.round((countCheckedIn / allTickets.length) * 100) : 0;
+ const progressFill = document.getElementById('checkinProgressFill');
+ if (progressFill) progressFill.style.width = checkinPct + '%';
+ const progressTxt = document.getElementById('checkinProgressText');
+ if (progressTxt) progressTxt.textContent = `${checkinPct}% da (${countCheckedIn}/${allTickets.length})`;
+
+ const revStats = calculateRevenueStats();
+ document.getElementById('statRevenue').textContent = formatCents(revStats.totalActualCents);
+ const elProjected = document.getElementById('statProjectedRevenue');
+ if (elProjected) {
+ elProjected.textContent = formatCents(revStats.totalProjectedCents);
+ }
+
+ const u18Count = allTickets.filter(t => t.category === 'u18').length;
+ const ue18Count = allTickets.filter(t => t.category === 'ue18').length;
+ document.getElementById('statU18Ratio').textContent = `${u18Count} / ${ue18Count}`;
+
+ // Always update cashier search results view
+ renderCashier();
+
+ // Attach listeners across desktop table and mobile cards
+ const containers = [tbody, mobileCards].filter(Boolean);
+ containers.forEach(container => {
+ container.querySelectorAll('.pay-btn').forEach(btn => {
+ btn.addEventListener('click', () => openCashModal(btn.dataset.id, btn));
+ });
+ container.querySelectorAll('.delete-btn').forEach(btn => {
+ btn.addEventListener('click', () => deleteRegistration(btn.dataset.id));
+ });
+ container.querySelectorAll('.edit-reg-btn').forEach(btn => {
+ btn.addEventListener('click', () => openEditRegModal(btn.dataset.id));
+ });
+ container.querySelectorAll('.checkin-toggle').forEach(btn => {
+ btn.addEventListener('click', () => toggleCheckIn(btn.dataset.ticketId, btn.dataset.state === '1', btn.dataset.name));
+ });
+ container.querySelectorAll('.pdf-btn').forEach(btn => {
+ btn.addEventListener('click', () => downloadTicketsPdf(btn.dataset.id, btn));
+ });
+ container.querySelectorAll('.invoice-btn').forEach(btn => {
+ btn.addEventListener('click', () => downloadInvoicePdf(btn.dataset.id, btn));
+ });
+ container.querySelectorAll('.add-companion-btn').forEach(btn => {
+ btn.addEventListener('click', () => openAddCompanionModal(btn.dataset.id));
+ });
+ container.querySelectorAll('.mail-channel-select').forEach(sel => {
+ sel.addEventListener('change', () => updateRegMailMethod(sel.dataset.id, sel.value));
+ });
+ container.querySelectorAll('.resend-lernsax-btn').forEach(btn => {
+ btn.addEventListener('click', () => sendOrderMailViaChannel(btn.dataset.id, 'lernsax', btn));
+ });
+ container.querySelectorAll('.manual-lernsax-btn').forEach(btn => {
+ btn.addEventListener('click', () => openManualLernSaxModal(btn.dataset.id));
+ });
+ });
+ }
+
+ async function toggleCheckIn(ticketId, currentlyCheckedIn, attendeeName){
+ await updateDoc(doc(db, 'tickets', ticketId), {
+ checkedIn: !currentlyCheckedIn,
+ checkedInAt: !currentlyCheckedIn ? serverTimestamp() : null
+ });
+ if (!currentlyCheckedIn) {
+ playCheckinChime();
+ showAdminToast(`${attendeeName || 'Gast'} erfolgreich eingecheckt!`);
+ } else {
+ showAdminToast(`Check-in für ${attendeeName || 'Gast'} zurückgenommen.`);
+ }
+ }
+
+ const PDF_BTN_CONTENT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>PDF</span>';
+ const INVOICE_BTN_CONTENT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg><span>Quittung</span>';
+
+ async function downloadTicketsPdf(regId, btnEl){
+ const reg = allRegs.find(r => r.id === regId);
+ const tickets = ticketsFor(regId);
+ if(!reg || tickets.length === 0) return;
+
+ const paidTickets = tickets.filter(t => t.paid);
+ const ticketsToDownload = (paidTickets.length > 0) ? paidTickets : tickets;
+
+ btnEl.disabled = true;
+ btnEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:12px; height:12px; animation:spin 0.8s linear infinite;"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg><span>...</span>';
+ try {
+ const idToken = await auth.currentUser.getIdToken();
+ const res = await workerFetch('/generate-pdf', {
+ method: 'POST',
+ headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + idToken},
+ body: JSON.stringify({
+ attendees: ticketsToDownload.map(t => ({ name: t.name, ticketId: t.ticketId, category: t.category }))
+ })
+ });
+ if(!res.ok) {
+ const errBody = await res.json().catch(() => ({}));
+ throw new Error(errBody.error || `PDF-Erstellung fehlgeschlagen (Status ${res.status})`);
+ }
+ const blob = await res.blob();
+ const url = URL.createObjectURL(blob);
+ const a = document.createElement('a');
+ a.href = url;
+ a.download = `Winterball-Tickets-${reg.name.replace(/\s+/g,'-')}.pdf`;
+ a.click();
+ URL.revokeObjectURL(url);
+ } catch(err){
+ console.error(err.message || String(err));
+ alert('PDF konnte nicht erstellt werden:\n' + err.message);
+ } finally {
+ btnEl.disabled = false;
+ btnEl.innerHTML = PDF_BTN_CONTENT;
+ }
+ }
+
+ async function downloadInvoicePdf(regId, btnEl){
+		const reg = allRegs.find(r => r.id === regId);
+		const tickets = ticketsFor(regId);
+		if(!reg || tickets.length === 0) return;
+
+		const paidTickets = tickets.filter(t => t.paid);
+		const ticketsToInvoice = (paidTickets.length > 0) ? paidTickets : tickets;
+
+		btnEl.disabled = true;
+		btnEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:12px; height:12px; animation:spin 0.8s linear infinite;"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg><span>...</span>';
+		try {
+			const priceSnap = await getDoc(doc(db, 'settings', 'pricing'));
+			const freshPrices = priceSnap.exists()
+				? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
+				: { u18: 0, ue18: 0 };
+
+			const donationAmount = Number(reg.donation || 0);
+			const invoiceItems = ticketsToInvoice.map(t => ({
+				name: t.name,
+				category: t.category,
+				price: freshPrices[t.category] || 0
+			}));
+
+			// Spende als eigene Position auf der Quittung vermerken
+			if (donationAmount > 0) {
+				invoiceItems.push({
+					name: 'Freiwillige Spende (Abikasse Jahrgang 12)',
+					category: 'Spende',
+					price: donationAmount
+				});
+			}
+
+			const idToken = await auth.currentUser.getIdToken();
+			const res = await workerFetch('/generate-invoice', {
+				method: 'POST',
+				headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + idToken},
+				body: JSON.stringify({
+					ordererName: reg.name,
+					donation: donationAmount,
+					attendees: invoiceItems
+				})
+			});
+			if(!res.ok) {
+				console.warn('Worker PDF antwortete nicht erfolgreich, öffne Quittung direkt:', res.status);
+				printDirectReceipt(reg, ticketsToInvoice, freshPrices, donationAmount);
+				return;
+			}
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `Winterball-Quittung-${reg.name.replace(/\s+/g,'-')}.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch(err){
+			console.error('PDF Fehler:', err.message || String(err));
+			const priceSnap = await getDoc(doc(db, 'settings', 'pricing')).catch(() => null);
+			const freshPrices = (priceSnap && priceSnap.exists())
+				? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
+				: { u18: 0, ue18: 0 };
+			const donationAmount = Number(reg.donation || 0);
+			printDirectReceipt(reg, ticketsToInvoice, freshPrices, donationAmount);
+		} finally {
+			btnEl.disabled = false;
+			btnEl.innerHTML = INVOICE_BTN_CONTENT;
+		}
+	}
+
+	// Offizieller Quittungs-Ausdruck mit ausgewiesener Spende
+	function printDirectReceipt(reg, ticketsToInvoice, prices, donationAmount = 0){
+		const now = new Date();
+		const pDate = getRegistrationPaymentDate(reg) || now;
+		const dateStr = pDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+		const timeStr = pDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+		
+		const ticketSum = ticketsToInvoice.reduce((sum, t) => sum + (prices[t.category] || 0), 0);
+		const totalSum = ticketSum + donationAmount;
+		const receiptNo = 'WB27-Q-' + (reg.id || '0000').substring(0, 8).toUpperCase();
+
+		const container = document.getElementById('printContainer');
+		if (!container) return;
+
+		container.innerHTML = `
+		<div style="font-family:'Segoe UI',Arial,sans-serif; color:#000; padding:15mm; line-height:1.5; max-width:210mm; margin:0 auto;">
+			<div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #000; padding-bottom:12px; margin-bottom:20px;">
+				<div>
+					<h1 style="font-size:20px; margin:0 0 4px 0; font-weight:800; letter-spacing:0.5px;">WINTERBALL 2027</h1>
+					<div style="font-size:13px; font-weight:600; color:#333;">Gymnasium Wilsdruff · Jahrgangsstufe 12</div>
+					<div style="font-size:12px; color:#666; margin-top:2px;">Veranstaltungstag: Samstag, 30. Januar 2027</div>
+				</div>
+				<div style="text-align:right; font-size:12px; line-height:1.4;">
+					<div style="font-weight:700; font-size:13px;">OFFIZIELLE QUITTUNG / BELEG</div>
+					<div>Beleg-Nr.: <strong>${receiptNo}</strong></div>
+					<div>Datum: <strong>${dateStr} · ${timeStr}</strong></div>
+				</div>
+			</div>
+
+			<div style="background:#f4f5f8; border:1px solid #ccc; padding:12px 16px; border-radius:6px; margin-bottom:20px;">
+				<div style="font-size:11px; text-transform:uppercase; font-weight:700; color:#555;">Käufer / Besteller:</div>
+				<div style="font-size:16px; font-weight:800; color:#000;">${escapeHtml(reg.name)}${reg.schoolClass ? ` <span style="font-size:13px; font-weight:600; color:#444;">(Klasse ${escapeHtml(reg.schoolClass)})</span>` : ''}</div>
+				${reg.email ? `<div style="font-size:12px; color:#555; margin-top:2px;">E-Mail: ${escapeHtml(reg.email)}</div>` : ''}
+			</div>
+
+			<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:20px;">
+				<thead>
+					<tr style="background:#e5e7eb; border-top:1px solid #999; border-bottom:1px solid #999;">
+						<th style="padding:8px 10px; text-align:left;">Pos.</th>
+						<th style="padding:8px 10px; text-align:left;">Bezeichnung / Gast</th>
+						<th style="padding:8px 10px; text-align:center;">Kategorie</th>
+						<th style="padding:8px 10px; text-align:right;">Betrag</th>
+					</tr>
+				</thead>
+				<tbody>
+					${ticketsToInvoice.map((t, idx) => `
+						<tr style="border-bottom:1px solid #eee;">
+							<td style="padding:8px 10px;">${idx + 1}</td>
+							<td style="padding:8px 10px;"><strong>Eintrittskarte: ${escapeHtml(t.name)}</strong></td>
+							<td style="padding:8px 10px; text-align:center;">${categoryLabel(t.category)}</td>
+							<td style="padding:8px 10px; text-align:right;">${(prices[t.category] || 0).toFixed(2).replace('.', ',')} €</td>
+						</tr>
+					`).join('')}
+					${donationAmount > 0 ? `
+						<tr style="border-bottom:1px solid #ccc; background:#fffbeb; font-weight:700;">
+							<td style="padding:10px 10px; color:#b45309;">💛</td>
+							<td style="padding:10px 10px; color:#b45309;" colspan="2">
+								<strong>Freiwillige Spende an den Abiturjahrgang 12</strong>
+								<div style="font-size:11px; font-weight:normal; color:#78350f;">Herzlichen Dank für die Unterstützung des Winterballs!</div>
+							</td>
+							<td style="padding:10px 10px; text-align:right; color:#b45309; font-size:13px;">${donationAmount.toFixed(2).replace('.', ',')} €</td>
+						</tr>
+					` : ''}
+				</tbody>
+				<tfoot>
+					<tr style="background:#e5e7eb; font-weight:800; font-size:14px; border-top:2px solid #000; border-bottom:2px solid #000;">
+						<td colspan="3" style="padding:10px 10px; text-align:right;">GESAMTBETRAG${donationAmount > 0 ? ' (INKL. SPENDE)' : ''}:</td>
+						<td style="padding:10px 10px; text-align:right; font-size:16px;">${totalSum.toFixed(2).replace('.', ',')} €</td>
+					</tr>
+				</tfoot>
+			</table>
+
+			<div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:30px; font-size:12px;">
+				<div style="line-height:1.5; color:#444;">
+					<div><strong>Zahlungsart:</strong> Barzahlung im Schul-Vorverkauf</div>
+					<div><strong>Status:</strong> Betrag vollständig und dankend erhalten.</div>
+					<div style="font-size:11px; color:#777; margin-top:4px;">Dieser Beleg dient als offizieller Zahlungsnachweis zum Winterball 2027.</div>
+				</div>
+				<div style="text-align:center; min-width:180px;">
+					<div style="border-bottom:1px solid #000; height:35px; margin-bottom:4px;"></div>
+					<div style="font-size:11px; color:#444;">Unterschrift Kassenwart / Einlass</div>
+				</div>
+			</div>
+		</div>
+		`;
+		window.print();
+	}
+	
+	async function deleteRegistration(regId){
+ const reg = allRegs.find(r => r.id === regId);
+ if(!reg) return;
+ const confirmed = confirm(`Bestellung von "${reg.name}" (inkl. aller zugehörigen Tickets) wirklich unwiderruflich löschen?`);
+ if(!confirmed) return;
+
+ const tickets = ticketsFor(regId);
+ const batch = writeBatch(db);
+ batch.delete(doc(db, 'registrations', regId));
+ tickets.forEach(t => batch.delete(doc(db, 'tickets', t.id)));
+ await batch.commit();
+ }
+
+ function escapeHtml(str){
+ return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ }
+
+ function formatTimestamp(ts){
+ if (!ts || !ts.toDate) return '–';
+ return ts.toDate().toLocaleString('de-DE', {
+ day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+ });
+ }
+
+ // --- Kassen-Popup: Betrag eingeben, Rückgeld wird automatisch berechnet ---
+ let cashModalState = { regId: null, btnEl: null, dueCents: 0, givenCents: 0, donationCents: 0, keepChangeActive: false };
+
+ function ticketsDueCents(regId){
+ const tickets = ticketsFor(regId);
+ if (!tickets.length) return 0;
+
+ // Hat mindestens ein Ticket dieser Bestellung bereits bezahlt?
+ const hasExplicitlyPaid = tickets.some(t => t.paid === true);
+
+ // Falls ein Teil bereits bezahlt ist (z. B. Besteller hat bereits bezahlt, neue Begleitung ist unbezahlt):
+ // Nur noch die unbezahlten Tickets berechnen!
+ // Falls noch kein Ticket bezahlt ist: alle Tickets berechnen.
+ const unpaid = hasExplicitlyPaid
+ ? tickets.filter(t => !t.paid)
+ : tickets;
+
+		const totalCents = unpaid.reduce((sum, t) => sum + getTicketPriceCents(t.category), 0);
+		return isNaN(totalCents) ? 0 : totalCents;
+	}
+
+	function formatCents(cents){
+		const c = parseMoneyNumber(cents, 0);
+		const valid = (isNaN(c) || !isFinite(c)) ? 0 : c;
+		return (valid / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+	}
+
+ function updateCashDisplay(){
+		const dueEl = document.getElementById('cashDue');
+		const givenEl = document.getElementById('cashGiven');
+		const donationRow = document.getElementById('cashDonationRow');
+		const donationEl = document.getElementById('cashDonation');
+		const changeRow = document.getElementById('cashChangeRow');
+		const changeEl = document.getElementById('cashChange');
+		const confirmBtn = document.getElementById('cashConfirmBtn');
+		const donateQuickWrap = document.getElementById('cashDonateQuickWrap');
+		const donateChangeBtn = document.getElementById('cashDonateChangeBtn');
+		const donateBtnText = document.getElementById('cashDonateChangeBtnText');
+		const roundUpBtn = document.getElementById('cashRoundUpBtn');
+		const inputDisplay = document.getElementById('cashInputDisplay');
+		const inputStatus = document.getElementById('posInputStatus');
+
+		if (dueEl) dueEl.textContent = formatCents(cashModalState.dueCents);
+		if (givenEl) givenEl.textContent = formatCents(cashModalState.givenCents);
+
+		// LCD Eingabe-Display synchronisieren
+		if (inputDisplay) {
+			inputDisplay.textContent = (cashModalState.givenCents / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		}
+
+		const excessCents = Math.max(0, cashModalState.givenCents - cashModalState.dueCents);
+
+		// Wenn Restgeld als Spende aktiv ist, Spende synchron zum aktuellen Überschuss halten
+		if (cashModalState.keepChangeActive) {
+			cashModalState.donationCents = excessCents;
+		} else if (cashModalState.donationCents > excessCents && excessCents > 0) {
+			cashModalState.donationCents = excessCents;
+		}
+
+		const effectiveChange = (cashModalState.givenCents - cashModalState.dueCents) - cashModalState.donationCents;
+
+		// LCD Status-Anzeige
+		if (inputStatus) {
+			if (cashModalState.givenCents === 0) {
+				inputStatus.textContent = 'Warte auf Eingabe...';
+				inputStatus.className = 'pos-screen-status';
+			} else if (cashModalState.givenCents < cashModalState.dueCents) {
+				const missing = cashModalState.dueCents - cashModalState.givenCents;
+				inputStatus.textContent = 'Noch ' + formatCents(missing) + ' offen';
+				inputStatus.className = 'pos-screen-status status-warn';
+			} else if (effectiveChange === 0) {
+				inputStatus.textContent = cashModalState.donationCents > 0 ? 'Passend inkl. Spende ✓' : 'Passend bezahlt ✓';
+				inputStatus.className = 'pos-screen-status status-ok';
+			} else {
+				inputStatus.textContent = formatCents(effectiveChange) + ' Rückgeld';
+				inputStatus.className = 'pos-screen-status status-ok';
+			}
+		}
+
+		// Spenden-Zeile im Bon
+		if (donationRow && donationEl) {
+			if (cashModalState.donationCents > 0) {
+				donationRow.style.display = 'flex';
+				donationEl.textContent = formatCents(cashModalState.donationCents);
+			} else {
+				donationRow.style.display = 'none';
+			}
+		}
+
+		// Wechselgeld-Zeile im Bon
+		if (changeRow && changeEl) {
+			if (cashModalState.givenCents < cashModalState.dueCents) {
+				const missing = cashModalState.dueCents - cashModalState.givenCents;
+				changeEl.textContent = '-' + formatCents(missing);
+				changeRow.classList.add('negative');
+			} else {
+				changeEl.textContent = formatCents(Math.max(0, effectiveChange));
+				changeRow.classList.remove('negative');
+			}
+		}
+
+		// Schnellbutton: Restgeld als Spende behalten
+		if (donateQuickWrap && donateChangeBtn && donateBtnText) {
+			if (excessCents > 0) {
+				donateQuickWrap.style.display = 'block';
+				if (cashModalState.donationCents > 0 && cashModalState.donationCents === excessCents) {
+					donateChangeBtn.classList.add('active');
+					donateBtnText.innerHTML = '✓ ' + formatCents(cashModalState.donationCents) + ' Restgeld als Spende übernommen <span style="font-size:11px; font-weight:normal; opacity:0.85; margin-left:4px;">(Klicken zum Entfernen)</span>';
+				} else {
+					donateChangeBtn.classList.remove('active');
+					donateBtnText.textContent = 'Restgeld als Spende behalten (+' + formatCents(excessCents) + ')';
+				}
+			} else if (cashModalState.donationCents > 0) {
+				donateQuickWrap.style.display = 'block';
+				donateChangeBtn.classList.add('active');
+				donateBtnText.innerHTML = '✓ ' + formatCents(cashModalState.donationCents) + ' Spende erfasst <span style="font-size:11px; font-weight:normal; opacity:0.85; margin-left:4px;">(Klicken zum Entfernen)</span>';
+			} else {
+				donateQuickWrap.style.display = 'none';
+				donateChangeBtn.classList.remove('active');
+			}
+		}
+
+		// Kluger Schnell-Aufrunden-Button
+		if (roundUpBtn) {
+			const due = cashModalState.dueCents;
+			let targetCents = 0;
+			if (due > 0) {
+				if (due < 1000 && due % 1000 !== 0) {
+					targetCents = 1000;
+				} else if (due % 500 !== 0) {
+					targetCents = Math.ceil(due / 500) * 500;
+				} else {
+					targetCents = Math.ceil(due / 1000) * 1000;
+					if (targetCents === due) targetCents = due + 500;
+				}
+			}
+			if (targetCents > due) {
+				const diff = targetCents - due;
+				roundUpBtn.style.display = 'block';
+				roundUpBtn.innerHTML = '<span>Auf ' + formatCents(targetCents) + ' aufrunden (+ ' + formatCents(diff) + ' Spende)</span>';
+				roundUpBtn.dataset.target = targetCents;
+				roundUpBtn.dataset.diff = diff;
+			} else {
+				roundUpBtn.style.display = 'none';
+			}
+		}
+
+		// Bestätigen-Button
+		if (confirmBtn) {
+			const isUnderpaid = cashModalState.givenCents < cashModalState.dueCents;
+			confirmBtn.disabled = isUnderpaid;
+			if (!isUnderpaid && cashModalState.donationCents > 0) {
+				confirmBtn.innerHTML = '<span>Bezahlt (' + formatCents(cashModalState.dueCents + cashModalState.donationCents) + ' inkl. ' + formatCents(cashModalState.donationCents) + ' Spende)</span>';
+			} else {
+				confirmBtn.innerHTML = '<span>Bezahlt</span>';
+			}
+		}
+	}
+
+	function openCashModal(regId, customBtnEl){
+		const reg = allRegs.find(r => r.id === regId);
+		const btnEl = customBtnEl || document.querySelector(`.pay-btn[data-id="${regId}"]`);
+		if (!reg) return;
+
+		const tickets = ticketsFor(regId);
+		const hasExplicitlyPaid = tickets.some(t => t.paid === true);
+		const unpaidTickets = hasExplicitlyPaid ? tickets.filter(t => !t.paid) : tickets;
+		const paidTickets = hasExplicitlyPaid ? tickets.filter(t => t.paid) : [];
+		const isPartial = paidTickets.length > 0 && unpaidTickets.length > 0;
+		const dueCents = ticketsDueCents(regId);
+
+		cashModalState = { regId, btnEl, dueCents, givenCents: 0, donationCents: 0, keepChangeActive: false };
+		document.getElementById('cashModalName').textContent = reg.name;
+
+		const subEl = document.getElementById('cashModalSubtitle');
+		if (subEl) {
+			if (isPartial) {
+				const unpaidNames = unpaidTickets.map(t => `<span style="font-weight:700; color:#fff;">${escapeHtml(t.name)}</span> <span style="color:#9aa7c2;">(${categoryLabel(t.category)} · ${formatCents(getTicketPriceCents(t.category))})</span>`).join(', ');
+				const paidNames = paidTickets.map(t => `<span style="color:#7fe0a8; font-weight:600;">${escapeHtml(t.name)}</span>`).join(', ');
+				subEl.innerHTML = `
+					<div style="background:rgba(255,210,127,0.08); border:1px solid rgba(255,210,127,0.25); border-radius:8px; padding:8px 11px; text-align:left; font-size:12px; line-height:1.45;">
+						<div style="color:#ffd27f; font-weight:700; display:flex; align-items:center; gap:5px; margin-bottom:4px;">
+							<span>Nachzahlung nur für offene Begleitung(en):</span>
+						</div>
+						<div style="margin-bottom:4px;">${unpaidNames}</div>
+						<div style="font-size:11.5px; border-top:1px dashed rgba(255,255,255,0.08); padding-top:4px; color:#9aa7c2;">
+							Bereits bezahlt: ${paidNames}
+						</div>
+					</div>
+				`;
+			} else if (tickets.length > 1) {
+				subEl.innerHTML = `
+					<div style="color:var(--text-dim); font-size:12px;">
+						${tickets.length} Tickets · Alle noch unbezahlt
+					</div>
+				`;
+			} else {
+				subEl.innerHTML = `
+					<div style="color:var(--text-dim); font-size:12px;">
+						1 Ticket (${categoryLabel(reg.category)})
+					</div>
+				`;
+			}
+		}
+
+		updateCashDisplay();
+		document.getElementById('cashModalOverlay').classList.add('show');
+	}
+
+	function closeCashModal(){
+		document.getElementById('cashModalOverlay').classList.remove('show');
+		cashModalState = { regId: null, btnEl: null, dueCents: 0, givenCents: 0, donationCents: 0, keepChangeActive: false };
+		const subEl = document.getElementById('cashModalSubtitle');
+		if (subEl) subEl.innerHTML = '';
+	}
+
+	// Tastendruck visuell auf dem Bildschirm aufleuchten lassen (taktiles Feedback)
+	function flashKeyButton(keyId) {
+		let btn = null;
+		if (/^[0-9]$/.test(keyId)) {
+			btn = document.querySelector(`.num-btn[data-num="${keyId}"]`);
+		} else if (keyId === 'back') {
+			btn = document.getElementById('cashBackBtn');
+		} else if (keyId === 'clear') {
+			btn = document.getElementById('cashClearBtn');
+		} else if (keyId === 'exact') {
+			btn = document.getElementById('cashExactBtn');
+		}
+		if (btn) {
+			btn.classList.add('key-pressed');
+			setTimeout(() => btn.classList.remove('key-pressed'), 130);
+		}
+	}
+
+	// Numpad Ziffern-Buttons (0-9)
+	document.querySelectorAll('.num-btn[data-num]').forEach(btn => {
+		btn.addEventListener('click', () => {
+			const next = cashModalState.givenCents * 10 + Number(btn.dataset.num);
+			if (next <= 99999999) cashModalState.givenCents = next;
+			updateCashDisplay();
+		});
+	});
+
+	// Schnellauswahl Banknoten (5€, 10€, 20€, 50€)
+	document.querySelectorAll('.preset-btn.bill-btn[data-bill]').forEach(btn => {
+		btn.addEventListener('click', () => {
+			const val = Number(btn.dataset.bill || 0);
+			if (val > 0) {
+				cashModalState.givenCents = val;
+				cashModalState.donationCents = 0;
+				cashModalState.keepChangeActive = false;
+				updateCashDisplay();
+				btn.classList.add('key-pressed');
+				setTimeout(() => btn.classList.remove('key-pressed'), 130);
+			}
+		});
+	});
+
+	// Backspace-Button
+	document.getElementById('cashBackBtn')?.addEventListener('click', () => {
+		cashModalState.givenCents = Math.floor(cashModalState.givenCents / 10);
+		updateCashDisplay();
+	});
+
+	// Clear-Button (C)
+	document.getElementById('cashClearBtn')?.addEventListener('click', () => {
+		cashModalState.givenCents = 0;
+		cashModalState.donationCents = 0;
+		cashModalState.keepChangeActive = false;
+		updateCashDisplay();
+	});
+
+	// Passend-Button (P)
+	document.getElementById('cashExactBtn')?.addEventListener('click', () => {
+		cashModalState.givenCents = cashModalState.dueCents;
+		cashModalState.donationCents = 0;
+		cashModalState.keepChangeActive = false;
+		updateCashDisplay();
+	});
+
+	// Schließen-Buttons (Abbrechen & X oben rechts)
+	document.getElementById('cashCancelBtn')?.addEventListener('click', closeCashModal);
+	document.getElementById('cashModalCloseX')?.addEventListener('click', closeCashModal);
+	document.getElementById('cashModalOverlay')?.addEventListener('click', (e) => {
+		if (e.target.id === 'cashModalOverlay') closeCashModal();
+	});
+
+	// Schnellbutton: Restgeld als Spende behalten
+	const donateChangeBtn = document.getElementById('cashDonateChangeBtn');
+	if (donateChangeBtn) {
+		donateChangeBtn.addEventListener('click', () => {
+			if (cashModalState.donationCents > 0) {
+				cashModalState.donationCents = 0;
+				cashModalState.keepChangeActive = false;
+			} else {
+				const excess = Math.max(0, cashModalState.givenCents - cashModalState.dueCents);
+				if (excess > 0) {
+					cashModalState.donationCents = excess;
+					cashModalState.keepChangeActive = true;
+				}
+			}
+			updateCashDisplay();
+		});
+	}
+
+	// Aufrunden-Button
+	const roundUpBtn = document.getElementById('cashRoundUpBtn');
+	if (roundUpBtn) {
+		roundUpBtn.addEventListener('click', () => {
+			const target = Number(roundUpBtn.dataset.target || 0);
+			const diff = Number(roundUpBtn.dataset.diff || 0);
+			if (target > 0) {
+				cashModalState.givenCents = target;
+				cashModalState.donationCents = diff;
+				cashModalState.keepChangeActive = true;
+				updateCashDisplay();
+			}
+		});
+	}
+
+	// Schnell-Spende Chips (+1 €, +2 €, +5 €, +10 €)
+	document.querySelectorAll('.donation-chip[data-donate]').forEach(chip => {
+		chip.addEventListener('click', () => {
+			const add = Number(chip.dataset.donate || 0);
+			if (add > 0) {
+				cashModalState.donationCents += add;
+				if (cashModalState.givenCents < (cashModalState.dueCents + cashModalState.donationCents)) {
+					cashModalState.givenCents = cashModalState.dueCents + cashModalState.donationCents;
+				}
+				updateCashDisplay();
+			}
+		});
+	});
+
+	// Bezahlt bestätigen
+	document.getElementById('cashConfirmBtn')?.addEventListener('click', () => {
+		const { regId, btnEl, donationCents } = cashModalState;
+		closeCashModal();
+		if (regId) markAsPaid(regId, btnEl, donationCents);
+	});
+
+	// =========================================================================
+	// PHYSISCHE TASTATURSTEUERUNG FÜR DAS KASSEN-MODAL
+	// =========================================================================
+	window.addEventListener('keydown', (e) => {
+		const overlay = document.getElementById('cashModalOverlay');
+		if (!overlay || !overlay.classList.contains('show')) return;
+
+		// Wenn der Benutzer gerade in ein Formularfeld tippt (z.B. Suchleiste), nicht abfangen
+		const activeEl = document.activeElement;
+		const tag = activeEl ? activeEl.tagName : '';
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+			if (e.key === 'Escape') {
+				activeEl.blur();
+				closeCashModal();
+				e.preventDefault();
+			}
+			return;
+		}
+
+		// Ziffern 0-9 (Haupttastatur und Ziffernblock)
+		if (/^[0-9]$/.test(e.key)) {
+			e.preventDefault();
+			const num = parseInt(e.key, 10);
+			const next = cashModalState.givenCents * 10 + num;
+			if (next <= 99999999) {
+				cashModalState.givenCents = next;
+				updateCashDisplay();
+			}
+			flashKeyButton(e.key);
+			return;
+		}
+
+		// Backspace (Letzte Ziffer löschen)
+		if (e.key === 'Backspace') {
+			e.preventDefault();
+			cashModalState.givenCents = Math.floor(cashModalState.givenCents / 10);
+			updateCashDisplay();
+			flashKeyButton('back');
+			return;
+		}
+
+		// Escape (Kassenfenster schließen)
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			closeCashModal();
+			return;
+		}
+
+		// 'c', 'C' oder 'Delete' / 'Entf' (Eingabe leeren)
+		if (e.key === 'c' || e.key === 'C' || e.key === 'Delete') {
+			e.preventDefault();
+			cashModalState.givenCents = 0;
+			cashModalState.donationCents = 0;
+			cashModalState.keepChangeActive = false;
+			updateCashDisplay();
+			flashKeyButton('clear');
+			return;
+		}
+
+		// 'p' oder 'P' (Passend bezahlt)
+		if (e.key === 'p' || e.key === 'P') {
+			e.preventDefault();
+			cashModalState.givenCents = cashModalState.dueCents;
+			cashModalState.donationCents = 0;
+			cashModalState.keepChangeActive = false;
+			updateCashDisplay();
+			flashKeyButton('exact');
+			return;
+		}
+
+		// 's' oder 'S' (Spenden-Aktion umschalten)
+		if (e.key === 's' || e.key === 'S') {
+			e.preventDefault();
+			const donateChangeBtn = document.getElementById('cashDonateChangeBtn');
+			const roundUpBtn = document.getElementById('cashRoundUpBtn');
+			if (donateChangeBtn && donateChangeBtn.offsetParent !== null) {
+				donateChangeBtn.click();
+			} else if (roundUpBtn && roundUpBtn.offsetParent !== null) {
+				roundUpBtn.click();
+			}
+			return;
+		}
+
+		// Enter (Bestätigen / Bezahlt)
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			const confirmBtn = document.getElementById('cashConfirmBtn');
+			if (confirmBtn && !confirmBtn.disabled) {
+				confirmBtn.click();
+			}
+			return;
+		}
+	});
+
+	// --- Bestellung vollständig bearbeiten (Name, E-Mail, Kategorie, Begleitungen) ---
+ let editRegId = null;
+
+ const editRegCatEl = document.getElementById('editRegCategory');
+ if (editRegCatEl) {
+ editRegCatEl.addEventListener('change', () => {
+ const classRow = document.getElementById('editRegClassRow');
+ if (classRow) classRow.style.display = editRegCatEl.value === 'u18' ? 'flex' : 'none';
+ });
+ }
+
+ const editRegEmailEl = document.getElementById('editRegEmailInput');
+ if (editRegEmailEl) {
+ editRegEmailEl.addEventListener('input', () => {
+ const mailMethodRow = document.getElementById('editRegMailMethodRow');
+ if (mailMethodRow) {
+ mailMethodRow.style.display = isLernSaxEmail(editRegEmailEl.value) ? 'flex' : 'none';
+ }
+ });
+ }
+
+ function makeEditCompanionRow(companion, ticketId){
+ const row = document.createElement('div');
+ row.className = 'companion-add-row';
+ row.dataset.ticketId = ticketId || ''; // vorhandenes Ticket, das mit dieser Zeile verknüpft ist (leer = neu)
+ const isU18 = companion.category !== 'ue18';
+ row.innerHTML = `
+ <input type="text" class="edit-companion-name" value="${(companion.name||'').replace(/"/g,'&quot;')}" placeholder="Vor- und Nachname"
+ style="padding:10px 12px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:13px; flex:2;">
+ <select class="edit-companion-category" style="flex:1;">
+ <option value="u18">U18</option>
+ <option value="ue18">Ü18</option>
+ </select>
+ <input type="text" class="edit-companion-class" value="${(companion.schoolClass||'').replace(/"/g,'&quot;')}" placeholder="Klasse (z.B. 10b)"
+ style="${isU18 ? 'display:block;' : 'display:none;'} max-width:115px; padding:10px 10px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text); font-size:13px;">
+ <button type="button" title="Begleitung entfernen">×</button>`;
+ const catSelect = row.querySelector('.edit-companion-category');
+ const classInput = row.querySelector('.edit-companion-class');
+ catSelect.value = isU18 ? 'u18' : 'ue18';
+ catSelect.addEventListener('change', () => {
+ classInput.style.display = catSelect.value === 'u18' ? 'block' : 'none';
+ if (catSelect.value !== 'u18') classInput.value = '';
+ });
+ row.querySelector('button').addEventListener('click', () => row.remove());
+ enhanceSelect(catSelect);
+ return row;
+ }
+
+ function openEditRegModal(regId){
+ const reg = allRegs.find(r => r.id === regId);
+ if (!reg) return;
+ editRegId = regId;
+
+ document.getElementById('editRegNameInput').value = reg.name || '';
+ document.getElementById('editRegEmailInput').value = reg.email || '';
+ const catVal = reg.category === 'ue18' ? 'ue18' : 'u18';
+ document.getElementById('editRegCategory').value = catVal;
+ resetCustomSelectVisual(document.getElementById('editRegCategory'));
+
+ const salutationVal = reg.salutation || (reg.anrede === 'Sie' ? 'sie' : 'du');
+ const salEl = document.getElementById('editRegSalutation');
+ if (salEl) {
+ salEl.value = salutationVal;
+ resetCustomSelectVisual(salEl);
+ }
+
+ const mailMethodEl = document.getElementById('editRegMailMethod');
+ const mailMethodRow = document.getElementById('editRegMailMethodRow');
+ const isLsMail = isLernSaxEmail(reg.email);
+ if (mailMethodRow) {
+ mailMethodRow.style.display = isLsMail ? 'flex' : 'none';
+ }
+ if (mailMethodEl) {
+ mailMethodEl.value = isLsMail ? normalizeMailMethod(reg.mailMethod) : 'auto';
+ resetCustomSelectVisual(mailMethodEl);
+ }
+
+ const classInput = document.getElementById('editRegClassInput');
+ const classRow = document.getElementById('editRegClassRow');
+ if (classInput) classInput.value = reg.schoolClass || '';
+ if (classRow) classRow.style.display = catVal === 'u18' ? 'flex' : 'none';
+
+ // Bestehende Tickets so gut wie möglich den Begleitungen zuordnen (per Name +
+ // Kategorie), damit beim Speichern genau die richtigen Ticket-Dokumente
+ // aktualisiert bzw. gelöscht werden, statt neue anzulegen.
+ const tickets = ticketsFor(regId);
+ const ordererTicket = tickets.find(t => t.name === reg.name && t.category === reg.category);
+ const usedTicketIds = new Set(ordererTicket ? [ordererTicket.id] : []);
+
+ const list = document.getElementById('editRegCompanionsList');
+ list.innerHTML = '';
+ (reg.companions || []).forEach(c => {
+ const match = tickets.find(t => !usedTicketIds.has(t.id) && t.name === c.name && t.category === c.category);
+ if (match) usedTicketIds.add(match.id);
+ list.appendChild(makeEditCompanionRow(c, match ? match.id : ''));
+ });
+
+ document.getElementById('editRegHint').textContent = reg.paid
+ ? 'Bestellung ist bezahlt. Werden neue Begleitungen hinzugefügt, gelten diese als unbezahlt und müssen erst an der Vorverkaufskasse bezahlt werden.'
+ : 'Bestellung ist noch nicht bezahlt: Beim Speichern wird eine aktualisierte Bestätigungs-E-Mail verschickt.';
+
+ document.getElementById('editRegModalOverlay').classList.add('show');
+ }
+
+ function closeEditRegModal(){
+ document.getElementById('editRegModalOverlay').classList.remove('show');
+ editRegId = null;
+ }
+
+ document.getElementById('editRegAddCompanionBtn').addEventListener('click', () => {
+ document.getElementById('editRegCompanionsList').appendChild(makeEditCompanionRow({ name: '', category: 'u18', schoolClass: '' }, ''));
+ });
+ document.getElementById('editRegCancelBtn').addEventListener('click', closeEditRegModal);
+ document.getElementById('editRegModalOverlay').addEventListener('click', (e) => {
+ if (e.target.id === 'editRegModalOverlay') closeEditRegModal();
+ });
+
+ // Bereinigt fehlerhafte E-Mail-Eingaben (z. B. doppelte Domain-Endung)
+ function sanitizeEmail(emailStr){
+ if (!emailStr) return '';
+ let str = String(emailStr).trim().toLowerCase();
+ const doubleDomainRegex = /(@(?:gymwilsdruff\.)?lernsax\.de)(?:\s*@?(?:gymwilsdruff\.)?lernsax\.de)+/gi;
+ if (doubleDomainRegex.test(str)) {
+ str = str.replace(doubleDomainRegex, '$1');
+ }
+ if ((str.match(/@/g) || []).length > 1 && str.includes('lernsax.de')) {
+ const parts = str.split('@');
+ const local = parts[0].trim();
+ const domain = parts.find(p => p.includes('lernsax.de')) || 'gymwilsdruff.lernsax.de';
+ str = `${local}@${domain}`;
+ }
+ return str;
+ }
+
+ document.getElementById('editRegSaveBtn').addEventListener('click', async () => {
+ const regId = editRegId;
+ const reg = allRegs.find(r => r.id === regId);
+ if (!reg) return;
+
+ const name = document.getElementById('editRegNameInput').value.trim();
+ const email = sanitizeEmail(document.getElementById('editRegEmailInput').value.trim());
+ const category = document.getElementById('editRegCategory').value;
+ const schoolClass = category === 'u18' ? (document.getElementById('editRegClassInput')?.value || '').trim() : null;
+ if (!name || !email) { alert('Name und E-Mail dürfen nicht leer sein.'); return; }
+
+ const companionRows = Array.from(document.getElementById('editRegCompanionsList').children);
+ const companionEntries = companionRows.map(row => {
+ const cCat = row.querySelector('.edit-companion-category').value;
+ const cClass = (row.querySelector('.edit-companion-class')?.value || '').trim();
+ return {
+ ticketId: row.dataset.ticketId || null,
+ name: row.querySelector('.edit-companion-name').value.trim(),
+ category: cCat,
+ schoolClass: cCat === 'u18' ? (cClass || null) : null
+ };
+ }).filter(c => c.name);
+
+ const hasNewCompanions = companionEntries.some(c => !c.ticketId);
+
+ const saveBtn = document.getElementById('editRegSaveBtn');
+ saveBtn.disabled = true;
+ saveBtn.textContent = 'Speichern...';
+
+ try {
+ const tickets = ticketsFor(regId);
+ const ordererTicket = tickets.find(t => t.name === reg.name && t.category === reg.category);
+ const keptTicketIds = new Set(companionEntries.map(c => c.ticketId).filter(Boolean));
+ if (ordererTicket) keptTicketIds.add(ordererTicket.id);
+
+ const batch = writeBatch(db);
+
+ // Falls neue Begleitungen hinzugefügt wurden, ist die Bestellung noch nicht voll bezahlt:
+ const keptTickets = tickets.filter(t => keptTicketIds.has(t.id));
+ const allKeptArePaid = keptTickets.length > 0 && keptTickets.every(t => t.paid);
+ const updatedPaidStatus = hasNewCompanions ? false : (allKeptArePaid || !!reg.paid);
+
+ // 1) Bestellungs-Grunddaten aktualisieren
+ const salutation = (document.getElementById('editRegSalutation')?.value || reg.salutation || 'du').toLowerCase();
+ const anrede = salutation === 'sie' ? 'Sie' : 'Du';
+ const rawMailMethod = normalizeMailMethod(document.getElementById('editRegMailMethod')?.value || reg.mailMethod);
+ const mailMethod = isLernSaxEmail(email) ? rawMailMethod : 'auto';
+
+ batch.update(doc(db, 'registrations', regId), {
+ name, email, salutation, anrede, category, mailMethod,
+ schoolClass: schoolClass || null,
+ companions: companionEntries.map(c => ({ name: c.name, category: c.category, schoolClass: c.schoolClass || null })),
+ paid: updatedPaidStatus
+ });
+ reg.salutation = salutation;
+ reg.anrede = anrede;
+ reg.mailMethod = mailMethod;
+
+ // 2) Ticket des Bestellers mitziehen (umbenennen/Kategorie ändern), oder
+ // anlegen, falls aus irgendeinem Grund noch keins existiert
+ let ordererTicketIdVal = ordererTicket ? ordererTicket.ticketId : null;
+ if (ordererTicket) {
+ batch.update(doc(db, 'tickets', ordererTicket.id), { name, category, schoolClass: schoolClass || null, email, salutation, anrede });
+ } else {
+ const ref = doc(collection(db, 'tickets'));
+ ordererTicketIdVal = genTicketId();
+ batch.set(ref, {
+ registrationId: regId, name, category, schoolClass: schoolClass || null, email,
+ salutation, anrede,
+ ticketId: ordererTicketIdVal, paid: !!reg.paid, checkedIn: false, createdAt: serverTimestamp()
+ });
+ }
+
+ // 3) Begleitungen abgleichen: bestehende Tickets updaten, entfernte löschen,
+ // neue anlegen (neu hinzugefügte Begleitungen sind IMMER unbezahlt: paid: false)
+ const allUpdatedAttendees = [
+ { name, category, schoolClass: schoolClass || null, ticketId: ordererTicketIdVal }
+ ];
+
+ companionEntries.forEach(c => {
+ if (c.ticketId) {
+ batch.update(doc(db, 'tickets', c.ticketId), { name: c.name, category: c.category, schoolClass: c.schoolClass || null, email });
+ const existingTicket = tickets.find(t => t.id === c.ticketId);
+ const tId = existingTicket ? existingTicket.ticketId : genTicketId();
+ allUpdatedAttendees.push({ name: c.name, category: c.category, schoolClass: c.schoolClass || null, ticketId: tId });
+ } else {
+ const ref = doc(collection(db, 'tickets'));
+ const ticketId = genTicketId();
+ batch.set(ref, {
+ registrationId: regId, name: c.name, category: c.category, schoolClass: c.schoolClass || null, email,
+ ticketId, paid: false, checkedIn: false, createdAt: serverTimestamp()
+ });
+ allUpdatedAttendees.push({ name: c.name, category: c.category, schoolClass: c.schoolClass || null, ticketId });
+ }
+ });
+ tickets.forEach(t => {
+ if (!keptTicketIds.has(t.id)) batch.delete(doc(db, 'tickets', t.id));
+ });
+
+ await batch.commit();
+
+ // 4) E-Mail mit den aktualisierten Daten verschicken
+ if (updatedPaidStatus) {
+ saveBtn.textContent = 'Ticket-Mail wird gesendet...';
+ const priceSnap = await getDoc(doc(db, 'settings', 'pricing'));
+ const freshPrices = priceSnap.exists()
+ ? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
+ : { u18: 0, ue18: 0 };
+ const idToken = await auth.currentUser.getIdToken();
+ const expectedLernSax = resolveUseLernSax({ email, schoolClass, mailMethod });
+ const res = await workerFetch('/send-tickets', {
+ method: 'POST',
+ headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + idToken},
+ body: JSON.stringify({
+ email,
+ ordererName: name,
+ salutation,
+ anrede,
+ isFormal: salutation === 'sie',
+ formell: salutation === 'sie',
+ greeting: salutation === 'sie' ? `Guten Tag ${name}` : `Hallo ${name}`,
+ attendees: allUpdatedAttendees.map(t => ({
+ ...t,
+ price: freshPrices[t.category] || 0
+ })),
+ useLernSax: expectedLernSax,
+ donation: Number(reg.donation || 0)
+ })
+ });
+ const resData = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			throw new Error(resData.error || `Ticket-Mail konnte nicht gesendet werden (${res.status})`);
+		}
+		const via = resData.via || (expectedLernSax ? 'lernsax' : 'brevo');
+		try {
+			await updateDoc(doc(db, 'registrations', regId), {
+				mailVia: via,
+				ticketsSentAt: serverTimestamp(),
+				...(typeof resData.savedToSent === 'boolean' ? { savedToSent: resData.savedToSent, sentFolder: resData.sentFolder || null } : {})
+			});
+			reg.mailVia = via;
+			if (typeof resData.savedToSent === 'boolean') {
+				reg.savedToSent = resData.savedToSent;
+				reg.sentFolder = resData.sentFolder || null;
+			}
+		} catch(e) {}
+		const channelNotice = (via === 'lernsax') ? ' (über LernSax ✉️)' : (expectedLernSax ? ' (über Brevo ⚠️)' : ' (über Brevo 🚀)');
+		showAdminToast(`Bestellung aktualisiert & Tickets versendet${channelNotice}!`);
+	} else {
+		saveBtn.textContent = 'Bestätigung wird gesendet...';
+		const expectedLernSax = resolveUseLernSax({ email, schoolClass, mailMethod });
+		const res = await workerFetch('/send-confirmation', {
+			method: 'POST',
+			headers: {'Content-Type':'application/json'},
+			body: JSON.stringify({
+				name,
+				email,
+				salutation,
+				anrede,
+				isFormal: salutation === 'sie',
+				formell: salutation === 'sie',
+				greeting: salutation === 'sie' ? `Guten Tag ${name}` : `Hallo ${name}`,
+				attendeeNames: allUpdatedAttendees.map(t => t.name),
+				useLernSax: expectedLernSax
+			})
+		});
+		const resData = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			console.warn('Aktualisierte Bestätigungsmail konnte nicht gesendet werden');
+			showAdminToast(`Bestellung aktualisiert (⚠️ Mailversand fehlgeschlagen).`);
+		} else {
+			const via = resData.via || (expectedLernSax ? 'lernsax' : 'brevo');
+			try {
+				await updateDoc(doc(db, 'registrations', regId), {
+					mailVia: via,
+					...(typeof resData.savedToSent === 'boolean' ? { savedToSent: resData.savedToSent, sentFolder: resData.sentFolder || null } : {})
+				});
+				reg.mailVia = via;
+				if (typeof resData.savedToSent === 'boolean') {
+					reg.savedToSent = resData.savedToSent;
+					reg.sentFolder = resData.sentFolder || null;
+				}
+			} catch(e) {}
+			const channelNotice = (via === 'lernsax') ? ' (über LernSax ✉️)' : (expectedLernSax ? ' (über Brevo ⚠️)' : ' (über Brevo 🚀)');
+			showAdminToast(`Bestellung aktualisiert! Bestätigungsmail versendet${channelNotice}.`);
+		}
+	}
+
+	closeEditRegModal();
+ } catch (err) {
+ console.error(err.message || String(err));
+ alert('Änderungen konnten nicht vollständig gespeichert werden: ' + err.message);
+ } finally {
+ saveBtn.disabled = false;
+ saveBtn.textContent = 'Speichern';
+ }
+ });
+
+ async function markAsPaid(regId, btnEl, donationCents = 0){
+		if (btnEl) {
+			btnEl.disabled = true;
+			btnEl.textContent = 'Wird verarbeitet...';
+		}
+		const reg = allRegs.find(r => r.id === regId);
+		const tickets = ticketsFor(regId);
+		if(!reg || tickets.length === 0) return;
+
+		try {
+			const batch = writeBatch(db);
+			const donationEuro = (donationCents > 0) ? (Math.round(donationCents) / 100) : (Number(reg.donation) || 0);
+			const updateData = { paid: true, paidAt: serverTimestamp() };
+			if (donationEuro > 0) {
+				updateData.donation = donationEuro;
+			}
+			batch.update(doc(db, 'registrations', regId), updateData);
+			tickets.forEach(t => batch.update(doc(db, 'tickets', t.id), { paid: true }));
+			await batch.commit();
+
+			// Sofort lokalen Zustand aktualisieren, damit UI & Kasse ohne Listener-Verzögerung umschalten
+			reg.paid = true;
+			reg.paidAt = new Date();
+			if (donationEuro > 0) {
+				reg.donation = donationEuro;
+			}
+			tickets.forEach(t => { t.paid = true; });
+			render();
+			renderCashier();
+			if (typeof renderCashierMode === 'function') renderCashierMode();
+
+ // Preise IMMER frisch aus Firestore holen (nicht den evtl. veralteten
+ // lokalen Cache nutzen) — verhindert 0€-Quittungen durch Timing-Probleme.
+ const priceSnap = await getDoc(doc(db, 'settings', 'pricing'));
+ const freshPrices = priceSnap.exists()
+ ? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
+ : { u18: 0, ue18: 0 };
+
+ const idToken = await auth.currentUser.getIdToken();
+ const salutation = reg.salutation || (reg.anrede === 'Sie' ? 'sie' : 'du');
+ const anrede = salutation === 'sie' ? 'Sie' : 'Du';
+ const expectedLernSax = resolveUseLernSax(reg);
+ const res = await workerFetch('/send-tickets', {
+ method: 'POST',
+ headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + idToken},
+ body: JSON.stringify({
+ email: reg.email,
+ ordererName: reg.name,
+ salutation,
+ anrede,
+ isFormal: salutation === 'sie',
+ formell: salutation === 'sie',
+ greeting: salutation === 'sie' ? `Guten Tag ${reg.name}` : `Hallo ${reg.name}`,
+ attendees: tickets.map(t => ({
+ name: t.name, ticketId: t.ticketId, category: t.category,
+ price: freshPrices[t.category] || 0
+ })),
+ useLernSax: expectedLernSax,
+ donation: donationEuro
+ })
+ });
+
+ const resData = await res.json().catch(() => ({}));
+ if(!res.ok) {
+ throw new Error(resData.error || `Server meldet HTTP ${res.status}`);
+ }
+
+ const via = resData.via || (expectedLernSax ? 'lernsax' : 'brevo');
+ try {
+ await updateDoc(doc(db, 'registrations', regId), {
+ mailVia: via,
+ ticketsSentAt: serverTimestamp(),
+ ...(typeof resData.savedToSent === 'boolean' ? { savedToSent: resData.savedToSent, sentFolder: resData.sentFolder || null } : {})
+ });
+ reg.mailVia = via;
+ if (typeof resData.savedToSent === 'boolean') {
+ reg.savedToSent = resData.savedToSent;
+ reg.sentFolder = resData.sentFolder || null;
+ }
+ render();
+ renderCashier();
+ } catch(_) {}
+
+ let channelNotice = '';
+ if (via === 'lernsax') {
+ channelNotice = ' (über LernSax ✉️)';
+ } else if (via === 'brevo') {
+ channelNotice = expectedLernSax
+ ? ' (über Brevo ⚠️ – LernSax-SMTP fehlgeschlagen oder nicht erreichbar)'
+ : ' (über Brevo 🚀)';
+ }
+
+ if (donationCents > 0) {
+ showAdminToast('Zahlung erfasst (' + formatCents(ticketsDueCents(regId)) + ' + ' + formatCents(donationCents) + ' Spende)! Mails versendet' + channelNotice + '! 💛');
+ } else {
+ showAdminToast('Zahlung erfasst & Tickets versendet' + channelNotice + '!');
+ }
+ } catch(err){
+ console.error(err.message || String(err));
+ alert('Als bezahlt markiert, aber Ticket-Mail konnte nicht verschickt werden:\n\n' + err.message);
+ if (btnEl) {
+ btnEl.disabled = false;
+ btnEl.textContent = 'Erneut versuchen';
+ }
+ }
+ }
+
+ function genTicketId(){
+ return 'WB27-' + Math.random().toString(36).slice(2,8).toUpperCase();
+ }
+
+ // --- Nachträglich eine Begleitung zu einer bestehenden Bestellung hinzufügen ---
+ let addCompanionRegId = null;
+
+ const addCompCatEl = document.getElementById('addCompanionModalCategory');
+ if (addCompCatEl) {
+ addCompCatEl.addEventListener('change', () => {
+ const classRow = document.getElementById('addCompanionModalClassRow');
+ if (classRow) classRow.style.display = addCompCatEl.value === 'u18' ? 'flex' : 'none';
+ });
+ }
+
+ function openAddCompanionModal(regId){
+ const reg = allRegs.find(r => r.id === regId);
+ if (!reg) return;
+ addCompanionRegId = regId;
+ document.getElementById('addCompanionModalName').textContent = `Begleitung für ${reg.name}`;
+ document.getElementById('addCompanionModalNameInput').value = '';
+ document.getElementById('addCompanionModalCategory').value = '';
+ resetCustomSelectVisual(document.getElementById('addCompanionModalCategory'));
+ const classInput = document.getElementById('addCompanionModalClassInput');
+ const classRow = document.getElementById('addCompanionModalClassRow');
+ if (classInput) classInput.value = '';
+ if (classRow) classRow.style.display = 'none';
+ document.getElementById('addCompanionModalHint').textContent = reg.paid
+ ? 'Der Besteller hat bereits bezahlt. Die Begleitung wird hinzugefügt und kann an der Kasse separat nachgezahlt werden (nur der Betrag für die neue Begleitung wird fällig).'
+ : 'Die neue Begleitung wird als unbezahlt angelegt und muss an der Vorverkaufskasse bezahlt werden.';
+ document.getElementById('addCompanionModalOverlay').classList.add('show');
+ }
+ function closeAddCompanionModal(){
+ document.getElementById('addCompanionModalOverlay').classList.remove('show');
+ addCompanionRegId = null;
+ }
+ document.getElementById('addCompanionModalCancelBtn').addEventListener('click', closeAddCompanionModal);
+ document.getElementById('addCompanionModalOverlay').addEventListener('click', (e) => {
+ if (e.target.id === 'addCompanionModalOverlay') closeAddCompanionModal();
+ });
+
+ document.getElementById('addCompanionModalConfirmBtn').addEventListener('click', async () => {
+ const regId = addCompanionRegId;
+ const reg = allRegs.find(r => r.id === regId);
+ const name = document.getElementById('addCompanionModalNameInput').value.trim();
+ const category = document.getElementById('addCompanionModalCategory').value;
+ const compClass = (document.getElementById('addCompanionModalClassInput')?.value || '').trim();
+ if (!reg || !name || !category) {
+ alert('Bitte Name und Altersgruppe der Begleitung ausfüllen.');
+ return;
+ }
+ if (category === 'u18' && !compClass) {
+ alert('Bitte die Klasse der minderjährigen Begleitperson angeben.');
+ return;
+ }
+
+ const confirmBtn = document.getElementById('addCompanionModalConfirmBtn');
+ confirmBtn.disabled = true;
+ confirmBtn.textContent = 'Wird hinzugefügt...';
+
+ try {
+ const ticketId = genTicketId();
+ const schoolClassVal = category === 'u18' ? compClass : null;
+ const newCompanion = { name, category, schoolClass: schoolClassVal };
+
+ // 1) Begleitung in der Bestellung ergänzen + neues Ticket dafür anlegen
+ // WICHTIG: Die neue Begleitung ist UNBEZAHLT!
+ // Da die Bestellung nun ein offenes Ticket hat, wird die Bestellung auf paid: false gesetzt,
+ // damit in der Übersicht der "Bezahlen"-Button für die Nachzahlung erscheint!
+ const batch = writeBatch(db);
+ batch.update(doc(db, 'registrations', regId), {
+ companions: [...(reg.companions || []), newCompanion],
+ paid: false
+ });
+ const ticketRef = doc(collection(db, 'tickets'));
+ batch.set(ticketRef, {
+ registrationId: regId, name, category, schoolClass: schoolClassVal, email: reg.email,
+ ticketId, paid: false, checkedIn: false, createdAt: serverTimestamp()
+ });
+ await batch.commit();
+
+ // 2) Bestätigungs-Mail über die hinzugefügte Begleitung senden (keine Ticket-Mail, da noch unbezahlt)
+		let channelNotice = '';
+		try {
+			const attendeeNames = [reg.name, ...(reg.companions || []).map(c => c.name), name];
+			const salutation = reg.salutation || (reg.anrede === 'Sie' ? 'sie' : 'du');
+			const anrede = salutation === 'sie' ? 'Sie' : 'Du';
+			const expectedCompLernSax = resolveUseLernSax(reg);
+			const compMailRes = await workerFetch('/send-confirmation', {
+				method: 'POST',
+				headers: {'Content-Type':'application/json'},
+				body: JSON.stringify({
+					name: reg.name,
+					email: reg.email,
+					salutation,
+					anrede,
+					isFormal: salutation === 'sie',
+					formell: salutation === 'sie',
+					greeting: salutation === 'sie' ? `Guten Tag ${reg.name}` : `Hallo ${reg.name}`,
+					attendeeNames,
+					useLernSax: expectedCompLernSax
+				})
+			});
+			const resData = await compMailRes.json().catch(() => ({}));
+			if (compMailRes.ok) {
+				const via = resData.via || (expectedCompLernSax ? 'lernsax' : 'brevo');
+				if (via === 'lernsax') {
+					channelNotice = ' (über LernSax ✉️)';
+				} else if (via === 'brevo') {
+					channelNotice = expectedCompLernSax ? ' (über Brevo ⚠️)' : ' (über Brevo 🚀)';
+				}
+				try {
+					await updateDoc(doc(db, 'registrations', regId), {
+						mailVia: via,
+						...(typeof resData.savedToSent === 'boolean' ? { savedToSent: resData.savedToSent, sentFolder: resData.sentFolder || null } : {})
+					});
+					reg.mailVia = via;
+					if (typeof resData.savedToSent === 'boolean') {
+						reg.savedToSent = resData.savedToSent;
+						reg.sentFolder = resData.sentFolder || null;
+					}
+				} catch(e) {}
+			}
+		} catch (mailErr) {
+			console.warn('Bestätigungsmail für Begleitung konnte nicht verschickt werden:', mailErr);
+		}
+
+		closeAddCompanionModal();
+		showAdminToast(`Begleitung "${name}" hinzugefügt! Bestätigungsmail versendet${channelNotice || ''}. Nachzahlung an der Kasse möglich.`);
+ } catch (err) {
+ console.error(err.message || String(err));
+ alert('Begleitung konnte nicht hinzugefügt werden: ' + err.message);
+ } finally {
+ confirmBtn.disabled = false;
+ confirmBtn.textContent = 'Hinzufügen';
+ }
+ });
+
+ // --- Manuelle Bestellung anlegen ---
+ const companionsBlock = document.getElementById('companionsBlock');
+ document.getElementById('addCompanionFieldBtn').addEventListener('click', () => addCompanionField());
+
+ function addCompanionField(){
+ const row = document.createElement('div');
+ row.className = 'companion-add-row';
+ row.innerHTML = `
+ <input type="text" class="add-companion-name" placeholder="Name der Begleitung" style="flex:2;">
+ <select class="add-companion-category" style="flex:1;">
+ <option value="">Alter?</option>
+ <option value="u18">U18</option>
+ <option value="ue18">Ü18</option>
+ </select>
+ <input type="text" class="add-companion-class" placeholder="Klasse" style="display:none; max-width:85px; padding:10px 8px; font-size:13px; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text);" autocomplete="off">
+ <button type="button">×</button>`;
+ const catSelect = row.querySelector('.add-companion-category');
+ const classInput = row.querySelector('.add-companion-class');
+ catSelect.addEventListener('change', () => {
+ classInput.style.display = catSelect.value === 'u18' ? 'block' : 'none';
+ if (catSelect.value !== 'u18') classInput.value = '';
+ });
+ row.querySelector('button').addEventListener('click', () => row.remove());
+ companionsBlock.appendChild(row);
+ enhanceSelect(catSelect);
+ }
+
+ const addBtn = document.getElementById('addBtn');
+ if (addBtn) {
+ addBtn.addEventListener('click', () => {
+ const form = document.getElementById('addForm');
+ if (form) {
+ form.classList.toggle('show');
+ setAddFormOpen(form.classList.contains('show'));
+ }
+ });
+ }
+
+ const cashierAddBtn = document.getElementById('cashierAddBtn');
+ if (cashierAddBtn) {
+ cashierAddBtn.addEventListener('click', () => {
+ const form = document.getElementById('addForm');
+ if (form) {
+ form.classList.toggle('show');
+ setAddFormOpen(form.classList.contains('show'));
+ if (form.classList.contains('show')) {
+ setTimeout(() => document.getElementById('addName')?.focus(), 50);
+ }
+ }
+ });
+ }
+
+ const cashierKassensturzBtn = document.getElementById('cashierKassensturzBtn');
+ if (cashierKassensturzBtn) {
+ cashierKassensturzBtn.addEventListener('click', () => {
+ if (typeof openKassensturz === 'function') openKassensturz('today');
+ });
+ }
+
+ document.getElementById('suggestEmailBtn').addEventListener('click', () => {
+ const name = document.getElementById('addName').value.trim();
+ const klasse = document.getElementById('addKlasse').value;
+ if (!name || name.split(/\s+/).length < 2) {
+ alert('Bitte zuerst Vor- und Nachname eintragen.');
+ return;
+ }
+ if (!klasse) {
+ alert('Bitte zuerst die Klassenstufe eintragen.');
+ return;
+ }
+ const suggested = suggestLernsaxEmail(name, klasse);
+ if (suggested) {
+ document.getElementById('addEmail').value = suggested;
+ }
+ });
+
+ document.getElementById('addCancelBtn').addEventListener('click', () => {
+ document.getElementById('addForm').classList.remove('show');
+ setAddFormOpen(false);
+ });
+
+ // Legt die Bestellung + Tickets an und aktualisiert Tabelle/Statistik einmalig
+ // sofort danach (unabhängig von scheduleRender, damit z.B. der Pay-Button in der
+ // Tabelle für "Anlegen & gleich bezahlen" direkt existiert). Gibt die neue
+ // Registrations-ID zurück, oder null bei einem Validierungsfehler.
+
+	async function createManualRegistration(options = {}){
+		const name = document.getElementById('addName').value.trim();
+		const klasse = document.getElementById('addKlasse').value.trim();
+		const email = sanitizeEmail(document.getElementById('addEmail').value.trim());
+		const category = document.getElementById('addCategory').value;
+		const companionRows = Array.from(document.querySelectorAll('.companion-add-row'));
+		const companions = companionRows.map(row => ({
+			name: row.querySelector('.add-companion-name').value.trim(),
+			category: row.querySelector('.add-companion-category').value,
+			schoolClass: (row.querySelector('.add-companion-class')?.value || '').trim() || null
+		})).filter(c => c.name.length > 0);
+
+		if(!name || !email || !category){
+			alert('Bitte Name, E-Mail und Altersgruppe des Bestellers ausfüllen.');
+			return null;
+		}
+		if(companions.some(c => !c.category)){
+			alert('Bitte bei jeder Begleitung die Altersgruppe angeben.');
+			return null;
+		}
+
+		const schoolClassVal = category === 'u18' ? (klasse || null) : null;
+		const salutation = (document.getElementById('addSalutation')?.value || 'du').toLowerCase();
+		const anrede = salutation === 'sie' ? 'Sie' : 'Du';
+
+		const regRef = await addDoc(collection(db, 'registrations'), {
+			name, email, salutation, anrede, category, schoolClass: schoolClassVal, companions, paid: false, createdAt: serverTimestamp()
+		});
+
+		const attendees = [{ name, category, schoolClass: schoolClassVal }, ...companions];
+		const ticketRefs = attendees.map(() => doc(collection(db, 'tickets')));
+		const batch = writeBatch(db);
+		attendees.forEach((attendee, i) => {
+			batch.set(ticketRefs[i], {
+				registrationId: regRef.id, name: attendee.name, category: attendee.category, schoolClass: attendee.schoolClass || null, email,
+				salutation, anrede,
+				ticketId: genTicketId(), paid: false, checkedIn: false, createdAt: serverTimestamp()
+			});
+		});
+		await batch.commit();
+
+		const now = new Date();
+		const newRegObj = { id: regRef.id, name, email, salutation, anrede, category, schoolClass: schoolClassVal, companions, paid: false, createdAt: now };
+		if (!allRegs.some(r => r.id === regRef.id)) {
+			allRegs.unshift(newRegObj);
+		}
+		attendees.forEach((attendee, i) => {
+			const ticketDocId = ticketRefs[i].id;
+			if (!allTickets.some(t => t.id === ticketDocId)) {
+				allTickets.push({
+					id: ticketDocId, registrationId: regRef.id, name: attendee.name, category: attendee.category, schoolClass: attendee.schoolClass || null,
+					email, salutation, anrede, ticketId: null, paid: false, checkedIn: false, createdAt: now
+				});
+			}
+		});
+		render();
+		renderCashier();
+		updateCharts();
+
+		let mailNotice = '';
+		if (!options.skipConfirmationMail) {
+			const expectedLernSax = shouldUseLernSax(email, schoolClassVal);
+			try {
+				const mailPayload = {
+					name,
+					email,
+					salutation,
+					anrede,
+					isFormal: salutation === 'sie',
+					formell: salutation === 'sie',
+					greeting: salutation === 'sie' ? `Guten Tag ${name}` : `Hallo ${name}`,
+					attendeeNames: attendees.map(a => a.name),
+					useLernSax: expectedLernSax
+				};
+
+				let sent = false;
+				let resData = {};
+				try {
+					const proxyRes = await fetch('/api/send-confirmation', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(mailPayload)
+					});
+					if (proxyRes.ok) {
+						sent = true;
+						resData = await proxyRes.json().catch(() => ({}));
+					}
+				} catch(e) {}
+
+				if (!sent) {
+					const workerRes = await fetch(WORKER_URL + '/send-confirmation', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(mailPayload)
+					});
+					if (workerRes.ok) {
+						sent = true;
+						resData = await workerRes.json().catch(() => ({}));
+					}
+				}
+
+				if (sent) {
+					const via = resData.via || (expectedLernSax ? 'lernsax' : 'brevo');
+					if (via === 'lernsax') {
+						mailNotice = ' (Bestätigung über LernSax ✉️ gesendet)';
+					} else if (via === 'brevo') {
+						mailNotice = expectedLernSax
+							? ' (Bestätigung über Brevo ⚠️ – LernSax nicht erreicht)'
+							: ' (Bestätigung über Brevo 🚀 gesendet)';
+					}
+					try {
+						await updateDoc(doc(db, 'registrations', regRef.id), {
+							mailVia: via,
+							confirmationSentAt: serverTimestamp(),
+							...(typeof resData.savedToSent === 'boolean' ? { savedToSent: resData.savedToSent, sentFolder: resData.sentFolder || null } : {})
+						});
+						newRegObj.mailVia = via;
+						if (typeof resData.savedToSent === 'boolean') {
+							newRegObj.savedToSent = resData.savedToSent;
+							newRegObj.sentFolder = resData.sentFolder || null;
+						}
+						render();
+						renderCashier();
+					} catch(e) {}
+				} else {
+					mailNotice = ' (⚠️ Bestätigungsmail konnte nicht versendet werden)';
+				}
+			} catch (mErr) {
+				console.warn('Mailversand fehlgeschlagen:', mErr);
+				mailNotice = ' (⚠️ Mailversand fehlgeschlagen)';
+			}
+		}
+
+		document.getElementById('addName').value = '';
+		document.getElementById('addEmail').value = '';
+		document.getElementById('addCategory').value = '';
+		resetCustomSelectVisual(document.getElementById('addCategory'));
+		const addSalEl = document.getElementById('addSalutation');
+		if (addSalEl) {
+			addSalEl.value = 'du';
+			resetCustomSelectVisual(addSalEl);
+		}
+		document.getElementById('addKlasse').value = '';
+		companionsBlock.innerHTML = '';
+
+		return { regId: regRef.id, mailNotice, name };
+	}
+
+	document.getElementById('addSaveBtn').addEventListener('click', async (e) => {
+		const btn = e.currentTarget;
+		const prevText = btn.textContent;
+		btn.disabled = true;
+		btn.textContent = 'Wird angelegt & Mail gesendet...';
+		const nameVal = (document.getElementById('addName')?.value || '').trim();
+		try {
+			const res = await createManualRegistration();
+			if (!res) return;
+			document.getElementById('addForm').classList.remove('show');
+			setAddFormOpen(false);
+			const cInp = document.getElementById('cashierSearch');
+			if (cInp && nameVal) {
+				cInp.value = nameVal;
+			}
+			renderCashier();
+			showAdminToast(`Bestellung für ${nameVal} erfolgreich angelegt!${res.mailNotice}`);
+		} catch(err) {
+			console.error(err);
+			alert('Fehler beim Anlegen: ' + err.message);
+		} finally {
+			btn.disabled = false;
+			btn.textContent = prevText;
+		}
+	});
+
+	document.getElementById('addPayNowBtn').addEventListener('click', async (e) => {
+		const btn = e.currentTarget;
+		const prevText = btn.textContent;
+		btn.disabled = true;
+		btn.textContent = 'Wird angelegt...';
+		const nameVal = (document.getElementById('addName')?.value || '').trim();
+		try {
+			const res = await createManualRegistration({ skipConfirmationMail: true });
+			if (!res) return;
+			document.getElementById('addForm').classList.remove('show');
+			setAddFormOpen(false);
+			const cInp = document.getElementById('cashierSearch');
+			if (cInp && nameVal) {
+				cInp.value = nameVal;
+			}
+			renderCashier();
+			showAdminToast(`Bestellung für ${nameVal} angelegt – Kassenfenster geöffnet!`);
+			openCashModal(res.regId);
+		} catch(err) {
+			console.error(err);
+			alert('Fehler beim Anlegen: ' + err.message);
+		} finally {
+			btn.disabled = false;
+			btn.textContent = prevText;
+		}
+	});
+
+ document.getElementById('priceSaveBtn').addEventListener('click', async () => {
+ const u18 = Number(document.getElementById('priceU18Input').value);
+ const ue18 = Number(document.getElementById('priceUe18Input').value);
+ if (isNaN(u18) || isNaN(ue18) || u18 < 0 || ue18 < 0) { alert('Bitte gültige Preise eingeben.'); return; }
+ await setDoc(doc(db, 'settings', 'pricing'), { u18, ue18 });
+ const savedEl = document.getElementById('priceSaved');
+ savedEl.classList.add('show');
+ setTimeout(() => savedEl.classList.remove('show'), 2000);
+ });
+
+ // --- Ablaufplan ---
+ scheduleList = document.getElementById('scheduleList');
+
+ function addScheduleRow(item = { time: '', label: '', note: '' }){
+ const listEl = scheduleList || document.getElementById('scheduleList');
+ if (!listEl) return;
+ const row = document.createElement('div');
+ row.className = 'schedule-row';
+ row.draggable = true;
+ row.innerHTML = `
+ <span class="drag-handle" title="Zum Sortieren ziehen">⠿</span>
+ <input type="text" class="schedule-time" placeholder="17:30" value="${escapeHtml(item.time || '')}">
+ <input type="text" class="schedule-label" placeholder="Programmpunkt (z.B. Einlass)" value="${escapeHtml(item.label || '')}">
+ <input type="text" class="schedule-note" placeholder="Beschreibung (optional)" value="${escapeHtml(item.note || '')}">
+ <div class="schedule-row-actions">
+ <button type="button" class="remove" title="Entfernen">×</button>
+ </div>`;
+ row.querySelector('.remove').addEventListener('click', () => row.remove());
+
+ // Drag-and-Drop zum Umsortieren
+ row.addEventListener('dragstart', () => row.classList.add('dragging'));
+ row.addEventListener('dragend', () => row.classList.remove('dragging'));
+
+ listEl.appendChild(row);
+ }
+
+ const scheduleListContainer = document.getElementById('scheduleList');
+ if (scheduleListContainer) {
+ scheduleListContainer.addEventListener('dragover', (e) => {
+ e.preventDefault();
+ const dragging = scheduleListContainer.querySelector('.dragging');
+ if (!dragging) return;
+ const afterEl = [...scheduleListContainer.querySelectorAll('.schedule-row:not(.dragging)')].find(row => {
+ const box = row.getBoundingClientRect();
+ return e.clientY < box.top + box.height / 2;
+ });
+ if (afterEl) scheduleListContainer.insertBefore(dragging, afterEl);
+ else scheduleListContainer.appendChild(dragging);
+ });
+ }
+
+ function renderScheduleRows(items){
+ const listEl = scheduleList || document.getElementById('scheduleList');
+ if (!listEl) return;
+ listEl.innerHTML = '';
+ (items || []).forEach(item => addScheduleRow(item));
+ }
+
+ document.getElementById('scheduleAddBtn')?.addEventListener('click', () => addScheduleRow());
+
+ document.getElementById('scheduleSaveBtn')?.addEventListener('click', async () => {
+ const listEl = scheduleList || document.getElementById('scheduleList');
+ if (!listEl) return;
+ const items = Array.from(listEl.querySelectorAll('.schedule-row')).map(row => ({
+ time: row.querySelector('.schedule-time').value.trim(),
+ label: row.querySelector('.schedule-label').value.trim(),
+ note: row.querySelector('.schedule-note').value.trim(),
+ })).filter(it => it.time || it.label);
+
+ if (items.some(it => !it.time || !it.label)) {
+ alert('Bitte bei jedem Programmpunkt mindestens Uhrzeit und Titel ausfüllen (oder die Zeile entfernen).');
+ return;
+ }
+
+ await setDoc(doc(db, 'settings', 'schedule'), { items });
+ const savedEl = document.getElementById('scheduleSaved');
+ savedEl.classList.add('show');
+ setTimeout(() => savedEl.classList.remove('show'), 2000);
+ });
+
+ document.getElementById('infoSaveBtn').addEventListener('click', async () => {
+ const text = document.getElementById('infoText').value.trim();
+ await setDoc(doc(db, 'settings', 'info'), { text });
+ const savedEl = document.getElementById('infoSaved');
+ savedEl.classList.add('show');
+ setTimeout(() => savedEl.classList.remove('show'), 2000);
+ });
+
+ document.getElementById('deadlineSaveBtn').addEventListener('click', async () => {
+ const val = document.getElementById('deadlineInput').value;
+ if (!val) { alert('Bitte ein Datum/Uhrzeit wählen oder "Kein Anmeldeschluss" nutzen.'); return; }
+ const iso = new Date(val).toISOString();
+ await setDoc(doc(db, 'settings', 'deadline'), { timestamp: iso });
+ const savedEl = document.getElementById('deadlineSaved');
+ savedEl.classList.add('show');
+ setTimeout(() => savedEl.classList.remove('show'), 2000);
+ });
+
+ document.getElementById('deadlineClearBtn').addEventListener('click', async () => {
+ await setDoc(doc(db, 'settings', 'deadline'), { timestamp: null });
+ document.getElementById('deadlineInput').value = '';
+ });
+
+ document.getElementById('opensAtSaveBtn').addEventListener('click', async () => {
+ const val = document.getElementById('opensAtInput').value;
+ if (!val) { alert('Bitte ein Datum/Uhrzeit wählen oder "Sofort geöffnet" nutzen.'); return; }
+ const iso = new Date(val).toISOString();
+ await setDoc(doc(db, 'settings', 'opensAt'), { timestamp: iso });
+ const savedEl = document.getElementById('opensAtSaved');
+ savedEl.classList.add('show');
+ setTimeout(() => savedEl.classList.remove('show'), 2000);
+ });
+
+ document.getElementById('opensAtClearBtn').addEventListener('click', async () => {
+ await setDoc(doc(db, 'settings', 'opensAt'), { timestamp: null });
+ document.getElementById('opensAtInput').value = '';
+ });
+
+ document.getElementById('lernsaxThresholdSaveBtn').addEventListener('click', async () => {
+ const val = Number(document.getElementById('lernsaxThresholdInput').value);
+ if (isNaN(val) || val < 1 || val > 13) { alert('Bitte eine gültige Klassenstufe (1–13) eingeben.'); return; }
+ await setDoc(doc(db, 'settings', 'lernsaxThreshold'), { grade: val });
+ const savedEl = document.getElementById('lernsaxThresholdSaved');
+ savedEl.classList.add('show');
+ setTimeout(() => savedEl.classList.remove('show'), 2000);
+ });
+
+ document.getElementById('maxTicketsSaveBtn').addEventListener('click', async () => {
+ const raw = document.getElementById('maxTicketsInput').value;
+ const val = raw === '' ? null : Number(raw);
+ if (val !== null && (isNaN(val) || val < 1)) { alert('Bitte eine gültige Zahl eingeben, oder leer lassen für kein Limit.'); return; }
+ await setDoc(doc(db, 'settings', 'capacity'), { maxTickets: val });
+ const savedEl = document.getElementById('maxTicketsSaved');
+ savedEl.classList.add('show');
+ setTimeout(() => savedEl.classList.remove('show'), 2000);
+ });
+ document.getElementById('maxTicketsClearBtn').addEventListener('click', async () => {
+ document.getElementById('maxTicketsInput').value = '';
+ await setDoc(doc(db, 'settings', 'capacity'), { maxTickets: null });
+ const savedEl = document.getElementById('maxTicketsSaved');
+ savedEl.classList.add('show');
+ setTimeout(() => savedEl.classList.remove('show'), 2000);
+ });
+
+ document.getElementById('deleteAllDataBtn').addEventListener('click', async () => {
+ if (allRegs.length === 0) { alert('Es sind aktuell keine Bestellungen vorhanden.'); return; }
+
+ const step1 = confirm(
+ `Wirklich ALLE ${allRegs.length} Bestellungen und ${allTickets.length} Tickets unwiderruflich löschen?\n\n` +
+ `Vor dem Löschen wird automatisch ein CSV-Backup heruntergeladen. Das eigentliche Löschen ` +
+ `aus Firestore kann danach NICHT rückgängig gemacht werden.`
+ );
+ if (!step1) return;
+
+ const typed = prompt('Zur Sicherheit: Tippe "LÖSCHEN" (in Großbuchstaben) ein, um fortzufahren.');
+ if (typed !== 'LÖSCHEN') { alert('Abgebrochen — Eingabe stimmte nicht überein.'); return; }
+
+ const btn = document.getElementById('deleteAllDataBtn');
+ btn.disabled = true;
+ btn.textContent = 'Erstelle Sicherheitskopie...';
+
+ // Sicherheitsnetz: vor dem endgültigen Löschen automatisch ein CSV-Backup
+ // herunterladen, falls doch mal was schiefgeht oder es aus Versehen passiert.
+ const stamp = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+ exportCsv(`winterball-backup-vor-loeschung_${stamp}.csv`);
+ await new Promise(r => setTimeout(r, 400)); // kurz warten, damit der Download sicher startet
+
+ btn.textContent = 'Wird gelöscht...';
+
+ try {
+ // Firestore erlaubt max. 500 Schreiboperationen pro Batch, daher in Häppchen aufteilen.
+ const allDocs = [
+ ...allRegs.map(r => doc(db, 'registrations', r.id)),
+ ...allTickets.map(t => doc(db, 'tickets', t.id)),
+ ];
+ const chunkSize = 400;
+ for (let i = 0; i < allDocs.length; i += chunkSize) {
+ const batch = writeBatch(db);
+ allDocs.slice(i, i + chunkSize).forEach(ref => batch.delete(ref));
+ await batch.commit();
+ }
+ alert('Alle Bestellungs- und Ticketdaten wurden gelöscht. Ein Backup liegt in deinem Downloads-Ordner.');
+ } catch (err) {
+ console.error(err.message || String(err));
+ alert('Beim Löschen ist ein Fehler aufgetreten. Bitte Konsole prüfen.');
+ } finally {
+ btn.disabled = false;
+ btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Alle Bestellungs- und Ticketdaten jetzt endgültig löschen</span>';
+ }
+ });
+
+ const searchInput = document.getElementById('search');
+ if (searchInput) {
+ searchInput.addEventListener('input', render);
+ }
+
+ const searchClearBtn = document.getElementById('searchClearBtn');
+ if (searchClearBtn) {
+ searchClearBtn.addEventListener('click', () => {
+ if (searchInput) {
+ searchInput.value = '';
+ searchInput.focus();
+ }
+ render();
+ });
+ }
+
+ // --- Kassen- & POS-Logik (Intuitive Such- und Bezahlmaske) ---
+ function renderCashier(){
+ const cashierInput = document.getElementById('cashierSearch');
+ const emptyState = document.getElementById('cashierEmptyState');
+ const resultsWrap = document.getElementById('cashierResultsWrap');
+ const countBadge = document.getElementById('cashierSearchCount');
+ const clearBtn = document.getElementById('cashierSearchClearBtn');
+
+ if (!cashierInput || !emptyState || !resultsWrap) return;
+
+ const query = (cashierInput.value || '').trim().toLowerCase();
+ if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
+
+ if (!query) {
+ emptyState.style.display = 'block';
+ resultsWrap.style.display = 'none';
+ resultsWrap.innerHTML = '';
+ if (countBadge) countBadge.textContent = '';
+ return;
+ }
+
+ const matches = allRegs.filter(r => {
+ if (r.name && r.name.toLowerCase().includes(query)) return true;
+ if (r.email && r.email.toLowerCase().includes(query)) return true;
+ if (r.schoolClass && r.schoolClass.toLowerCase().includes(query)) return true;
+ if (r.companions && r.companions.some(c => (c.name && c.name.toLowerCase().includes(query)) || (c.schoolClass && c.schoolClass.toLowerCase().includes(query)))) return true;
+ const tix = ticketsFor(r.id);
+ if (tix.some(t => t.ticketId && t.ticketId.toLowerCase().includes(query))) return true;
+ return false;
+ });
+
+ if (countBadge) {
+ countBadge.textContent = `${matches.length} Treffer`;
+ }
+
+ emptyState.style.display = 'none';
+ resultsWrap.style.display = 'flex';
+
+ if (matches.length === 0) {
+ resultsWrap.innerHTML = `
+ <div class="cashier-card" style="text-align:center; padding:36px 20px;">
+ <div style="font-size:28px; margin-bottom:8px;"></div>
+ <div style="font-size:16px; font-weight:700; color:#fff; margin-bottom:6px;">Keine Bestellung gefunden</div>
+ <div style="font-size:13px; color:var(--text-dim); max-width:440px; margin:0 auto 16px;">Für die Suche nach „${escapeHtml(query)}“ wurde keine passende Reservierung gefunden.</div>
+ <button type="button" id="cashierNotFoundAddBtn" class="primary" style="margin:0 auto; padding:10px 18px; font-size:13px; border-radius:var(--radius-sm); font-weight:700; display:inline-flex; align-items:center; gap:6px;">
+ <span>+ Neue Bestellung für „${escapeHtml(query)}“ anlegen</span>
+ </button>
+ </div>
+ `;
+ const notFoundBtn = document.getElementById('cashierNotFoundAddBtn');
+ if (notFoundBtn) {
+ notFoundBtn.addEventListener('click', () => {
+ const form = document.getElementById('addForm');
+ if (form) {
+ form.classList.add('show');
+ setAddFormOpen(true);
+ const nameInput = document.getElementById('addName');
+ if (nameInput) {
+ nameInput.value = query;
+ nameInput.focus();
+ }
+ }
+ });
+ }
+ return;
+ }
+
+ resultsWrap.innerHTML = matches.map(r => {
+ const tickets = ticketsFor(r.id);
+ const hasExplicitlyPaid = tickets.some(t => t.paid === true);
+ const hasUnpaid = tickets.some(t => !t.paid);
+ const isPartial = hasExplicitlyPaid && hasUnpaid;
+ const dueCents = ticketsDueCents(r.id);
+ const paidCount = tickets.filter(t => t.paid).length;
+ const totalTickets = tickets.length;
+ const donationCents = parseMoneyCents(r.donation, 0);
+		const totalCents = tickets.reduce((sum, t) => sum + getTicketPriceCents(t.category), 0) + donationCents;
+
+ const salutationBadge = (r.salutation === 'sie' || r.anrede === 'Sie')
+ ? '<span class="badge out" style="color:#c4b5fd; border-color:rgba(196,181,253,0.35); background:rgba(196,181,253,0.12); font-weight:700;">Sie</span>'
+ : '<span class="badge out" style="color:var(--text-dim); border-color:rgba(255,255,255,0.12); background:rgba(255,255,255,0.03);">Du</span>';
+
+ const ordererClassBadge = (r.category === 'u18' && r.schoolClass)
+ ? `<span class="badge out" style="color:var(--accent-glow); border-color:rgba(143,180,255,0.35); background:rgba(143,180,255,0.12);">Kl. ${escapeHtml(r.schoolClass)}</span>`
+ : '';
+
+ const attendeesBadges = tickets.map(t => {
+ const tClass = t.schoolClass || (t.name === r.name ? r.schoolClass : null);
+ return `
+ <div style="display:flex; justify-content:space-between; align-items:center; padding:7px 10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:6px; margin-bottom:5px;">
+ <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+ <span style="font-weight:600; color:#fff; font-size:13.5px;">${escapeHtml(t.name)}</span>
+ <span class="badge out" style="font-size:10px;">${categoryLabel(t.category)}</span>
+ ${t.category === 'u18' && tClass ? `<span class="badge out" style="font-size:10px; color:var(--accent-glow); border-color:rgba(143,180,255,0.3); background:rgba(143,180,255,0.1);">Kl. ${escapeHtml(tClass)}</span>` : ''}
+ ${t.ticketId ? `<span style="font-family:monospace; font-size:10.5px; color:var(--text-dim);">${escapeHtml(t.ticketId)}</span>` : ''}
+ </div>
+ <div>
+ ${t.paid
+ ? `<span class="badge in" style="font-size:11px;"> Bezahlt</span>`
+ : `<span class="badge out" style="font-size:11px; background:rgba(255,210,127,0.14); color:#ffd27f; border-color:rgba(255,210,127,0.3);">Offen: ${formatCents(getTicketPriceCents(t.category))}</span>`}
+ </div>
+ </div>
+ `;
+ }).join('');
+
+ return `
+ <div class="cashier-card ${r.paid ? 'is-paid' : 'is-unpaid'}">
+ <div class="cashier-card-header">
+ <div>
+ <div class="cashier-card-name">
+ <span>${escapeHtml(r.name || '')}</span>
+ ${salutationBadge}
+ <span class="badge out">${categoryLabel(r.category)}</span>
+ ${ordererClassBadge}
+ </div>
+ <div class="cashier-card-meta">
+ <span>E-Mail: <strong style="color:var(--text);">${escapeHtml(r.email || '–')}</strong></span>
+ <span style="margin:0 6px;">·</span>
+ <span>Registriert: ${formatTimestamp(r.createdAt)}</span>
+ ${renderMailChannelControls(r)}
+ </div>
+ </div>
+ <div class="cashier-card-amount-box">
+ ${r.paid
+ ? `<div class="cashier-amount-paid"> Bezahlt</div><div class="cashier-amount-label">${formatCents(totalCents)} erhalten${donationCents > 0 ? ` (inkl. ${formatCents(donationCents)} Spende)` : ''}</div>`
+ : `<div class="cashier-amount-due">${formatCents(dueCents)}</div><div class="cashier-amount-label">${isPartial ? `${paidCount}/${totalTickets} bezahlt · Rest offen` : 'Zu zahlen (Bar)'}</div>`
+ }
+ </div>
+ </div>
+
+ <div class="cashier-tickets-section">
+ <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--text-dim); margin-bottom:8px;">
+ Tickets (${totalTickets}):
+ </div>
+ ${attendeesBadges}
+ </div>
+
+ <div class="cashier-card-actions">
+ ${!r.paid
+ ? `<button type="button" class="cashier-pay-action-btn cashier-pay-btn" data-id="${r.id}">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:18px; height:18px;"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="7" cy="15" r="1"/></svg>
+ <span>${isPartial ? `Rest nachzahlen (${formatCents(dueCents)})` : `Jetzt Bezahlen (${formatCents(dueCents)})`}</span>
+ </button>`
+ : `<span class="badge in" style="padding:8px 14px; font-size:13px; font-weight:700;"> Vollständig bezahlt</span>`
+ }
+ <button type="button" class="add-companion-btn" data-id="${r.id}" style="padding:10px 14px; font-size:12.5px; border-radius:var(--radius-sm); border:1px solid var(--glass-border); background:rgba(255,255,255,0.06); color:var(--text); cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+ <span>+ Begleitung hinzufügen</span>
+ </button>
+ ${(r.paid || isPartial) ? `<button type="button" class="pdf-btn" data-id="${r.id}" style="padding:10px 14px; font-size:12.5px;" title="Tickets als PDF herunterladen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>Tickets (PDF)</span></button>` : ''}
+ ${(r.paid || isPartial) ? `<button type="button" class="invoice-btn" data-id="${r.id}" style="padding:10px 14px; font-size:12.5px;" title="Quittung als PDF herunterladen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg><span>Quittung</span></button>` : ''}
+ </div>
+ </div>
+ `;
+ }).join('');
+
+ resultsWrap.querySelectorAll('.cashier-pay-btn').forEach(btn => {
+ btn.addEventListener('click', () => openCashModal(btn.dataset.id, btn));
+ });
+ resultsWrap.querySelectorAll('.add-companion-btn').forEach(btn => {
+ btn.addEventListener('click', () => openAddCompanionModal(btn.dataset.id));
+ });
+ resultsWrap.querySelectorAll('.pdf-btn').forEach(btn => {
+ btn.addEventListener('click', () => downloadTicketsPdf(btn.dataset.id, btn));
+ });
+ resultsWrap.querySelectorAll('.invoice-btn').forEach(btn => {
+ btn.addEventListener('click', () => downloadInvoicePdf(btn.dataset.id, btn));
+ });
+ resultsWrap.querySelectorAll('.mail-channel-select').forEach(sel => {
+ sel.addEventListener('change', () => updateRegMailMethod(sel.dataset.id, sel.value));
+ });
+ resultsWrap.querySelectorAll('.resend-lernsax-btn').forEach(btn => {
+ btn.addEventListener('click', () => sendOrderMailViaChannel(btn.dataset.id, 'lernsax', btn));
+ });
+ resultsWrap.querySelectorAll('.manual-lernsax-btn').forEach(btn => {
+ btn.addEventListener('click', () => openManualLernSaxModal(btn.dataset.id));
+ });
+ }
+
+ const cashierSearchInput = document.getElementById('cashierSearch');
+ const cashierSearchClearBtn = document.getElementById('cashierSearchClearBtn');
+
+ if (cashierSearchInput) {
+ cashierSearchInput.addEventListener('input', renderCashier);
+ }
+ if (cashierSearchClearBtn) {
+ cashierSearchClearBtn.addEventListener('click', () => {
+ if (cashierSearchInput) {
+ cashierSearchInput.value = '';
+ cashierSearchInput.focus();
+ }
+ renderCashier();
+ });
+ }
+
+ // Keyboard shortcut '/' to focus search quickly
+ window.addEventListener('keydown', (e) => {
+ if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+ e.preventDefault();
+ const activeTab = document.querySelector('.tab-btn.active')?.dataset?.tab;
+ if (activeTab === 'cashier') {
+ cashierSearchInput?.focus();
+ } else {
+ searchInput?.focus();
+ }
+ }
+ });
+
+ // Filter chips listeners
+ document.querySelectorAll('.filter-chips .chip[data-filter]').forEach(chip => {
+ chip.addEventListener('click', () => {
+ document.querySelectorAll('.filter-chips .chip[data-filter]').forEach(c => c.classList.remove('active'));
+ chip.classList.add('active');
+ activeFilter = chip.dataset.filter || 'all';
+ render();
+ });
+ });
+
+ // Poll search & filter chips listeners
+ const pollSearchInput = document.getElementById('pollSearch');
+ if (pollSearchInput) {
+ pollSearchInput.addEventListener('input', renderPolls);
+ }
+
+ document.querySelectorAll('.filter-chips .chip[data-poll-filter]').forEach(chip => {
+ chip.addEventListener('click', () => {
+ document.querySelectorAll('.filter-chips .chip[data-poll-filter]').forEach(c => c.classList.remove('active'));
+ chip.classList.add('active');
+ activePollFilter = chip.dataset.pollFilter || 'all';
+ renderPolls();
+ });
+ });
+
+ const pollExportBtn = document.getElementById('pollExportBtn');
+ if (pollExportBtn) {
+ pollExportBtn.addEventListener('click', exportPollCsv);
+ }
+
+ const headerRefreshBtn = document.getElementById('headerRefreshBtn');
+ if (headerRefreshBtn) {
+ headerRefreshBtn.addEventListener('click', () => {
+ render();
+ renderRatings();
+ renderPolls();
+ scheduleCharts();
+ showAdminToast('Dashboard aktualisiert');
+ });
+ }
+
+ function exportCsv(filename){
+  const header = ['Besteller','Anrede','Altersgruppe','Klasse','Begleitungen','E-Mail','Tickets gesamt','Bezahlt','Spende (€)','Gesamtbetrag (€)','Angemeldet am','Bezahlt am'];
+  const rows = allRegs.map(r => {
+    const don = parseMoneyNumber(r.donation, 0);
+    const tkts = ticketsFor(r.id);
+    const ticketCost = tkts.reduce((sum, t) => sum + getTicketPrice(t.category), 0);
+    const total = r.paid ? (ticketCost + don) : 0;
+    return [
+      r.name,
+      r.salutation === 'sie' || r.anrede === 'Sie' ? 'Sie' : 'Du',
+      categoryLabel(r.category),
+      r.schoolClass || '',
+      (r.companions||[]).map(c => `${c.name} (${categoryLabel(c.category)}${c.category === 'u18' && c.schoolClass ? ', Kl. ' + c.schoolClass : ''})`).join('; '),
+      r.email,
+      tkts.length,
+      r.paid ? 'ja':'nein',
+      don > 0 ? don.toFixed(2).replace('.', ',') : '0,00',
+      r.paid ? total.toFixed(2).replace('.', ',') : '0,00',
+      formatTimestamp(r.createdAt),
+      r.paid ? formatTimestamp(r.paidAt) : ''
+    ];
+  });
+  const csv = [header, ...rows].map(row => row.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+ const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+ const url = URL.createObjectURL(blob);
+ const a = document.createElement('a');
+ a.href = url; a.download = filename; a.click();
+ URL.revokeObjectURL(url);
+ }
+
+ document.getElementById('exportBtn').addEventListener('click', () => {
+ exportCsv('winterball-bestellungen.csv');
+ });
+
+ // =========================================================================
+ // 1. REINE GÄSTELISTE & MANUELLER 1-KLICK-CHECK-IN
+ // =========================================================================
+ activeGuestFilter = 'all'; // 'all', 'open', 'checkedin', 'u18', 'ue18', 'unpaid'
+
+ function buildAllGuestsList(){
+ const list = [];
+ allTickets.forEach(t => {
+ const reg = allRegs.find(r => r.id === t.registrationId);
+ const isOrderer = reg && reg.name && (t.name.trim().toLowerCase() === reg.name.trim().toLowerCase());
+ const role = isOrderer ? 'Besteller' : (reg && reg.name ? `Begleitung von ${reg.name}` : 'Begleitung');
+ const isPaid = t.paid === true || (reg && reg.paid === true);
+ const schoolClass = t.schoolClass || (isOrderer && reg ? reg.schoolClass : null);
+ list.push({
+ ticket: t,
+ reg,
+ name: t.name || 'Unbekannt',
+ role,
+ isOrderer,
+ category: t.category || (reg ? reg.category : 'u18'),
+ schoolClass,
+ paid: isPaid,
+ checkedIn: !!t.checkedIn,
+ checkedInAt: t.checkedInAt,
+ ticketId: t.ticketId || t.id
+ });
+ });
+ return list;
+ }
+
+ function formatCheckinTime(ts){
+ if (!ts) return '';
+ const d = ts.toDate ? ts.toDate() : (ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts));
+ if (isNaN(d.getTime())) return '';
+ return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+ }
+
+ function getRegistrationPaymentDate(r){
+ if (!r || !r.paid) return null;
+ if (r.paidAt) {
+ if (r.paidAt.toDate) return r.paidAt.toDate();
+ if (r.paidAt.seconds) return new Date(r.paidAt.seconds * 1000);
+ const d = new Date(r.paidAt);
+ if (!isNaN(d.getTime())) return d;
+ }
+ if (r.createdAt) {
+ if (r.createdAt.toDate) return r.createdAt.toDate();
+ if (r.createdAt.seconds) return new Date(r.createdAt.seconds * 1000);
+ const d = new Date(r.createdAt);
+ if (!isNaN(d.getTime())) return d;
+ }
+ return null;
+ }
+
+ function isSameCalendarDay(d1, d2){
+ if (!d1 || !d2) return false;
+ return d1.getFullYear() === d2.getFullYear() &&
+ d1.getMonth() === d2.getMonth() &&
+ d1.getDate() === d2.getDate();
+ }
+
+ function renderGuestList(){
+ const guests = buildAllGuestsList();
+ const searchInput = document.getElementById('guestSearch');
+ const term = (searchInput ? searchInput.value : '').trim().toLowerCase();
+ const clearBtn = document.getElementById('guestSearchClearBtn');
+ if (clearBtn) clearBtn.style.display = term ? 'flex' : 'none';
+
+ // Summary stats
+ const totalCount = guests.length;
+ const checkedCount = guests.filter(g => g.checkedIn).length;
+ const openCount = totalCount - checkedCount;
+ const checkedPercent = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
+ const u18Checked = guests.filter(g => g.checkedIn && g.category === 'u18').length;
+ const ue18Checked = guests.filter(g => g.checkedIn && g.category === 'ue18').length;
+ const unpaidCount = guests.filter(g => !g.paid).length;
+
+ const elTotal = document.getElementById('gStatTotal');
+ if (elTotal) elTotal.textContent = totalCount;
+ const elChecked = document.getElementById('gStatChecked');
+ if (elChecked) elChecked.textContent = checkedCount;
+ const elCheckedPct = document.getElementById('gStatCheckedPercent');
+ if (elCheckedPct) elCheckedPct.textContent = `${checkedPercent}% der Gäste anwesend`;
+ const elOpen = document.getElementById('gStatOpen');
+ if (elOpen) elOpen.textContent = openCount;
+ const elAge = document.getElementById('gStatAgeRatio');
+ if (elAge) elAge.textContent = `${u18Checked} / ${ue18Checked}`;
+ const elUnpaid = document.getElementById('gStatUnpaidCount');
+ if (elUnpaid) elUnpaid.textContent = unpaidCount;
+
+ // Tab badge
+ const tabBadge = document.getElementById('tabGuestsCount');
+ if (tabBadge) tabBadge.textContent = totalCount;
+
+ // Filter chip counts
+ if (document.getElementById('chipGuestAll')) document.getElementById('chipGuestAll').textContent = totalCount;
+ if (document.getElementById('chipGuestOpen')) document.getElementById('chipGuestOpen').textContent = openCount;
+ if (document.getElementById('chipGuestCheckedIn')) document.getElementById('chipGuestCheckedIn').textContent = checkedCount;
+ if (document.getElementById('chipGuestU18')) document.getElementById('chipGuestU18').textContent = guests.filter(g => g.category === 'u18').length;
+ if (document.getElementById('chipGuestUe18')) document.getElementById('chipGuestUe18').textContent = guests.filter(g => g.category === 'ue18').length;
+ if (document.getElementById('chipGuestUnpaid')) document.getElementById('chipGuestUnpaid').textContent = unpaidCount;
+
+ // Filter list
+ const filtered = guests.filter(g => {
+ const matchSearch = !term ||
+ g.name.toLowerCase().includes(term) ||
+ g.role.toLowerCase().includes(term) ||
+ g.ticketId.toLowerCase().includes(term) ||
+ (g.schoolClass || '').toLowerCase().includes(term) ||
+ (g.reg && (g.reg.name || '').toLowerCase().includes(term)) ||
+ (g.reg && (g.reg.email || '').toLowerCase().includes(term));
+
+ if (!matchSearch) return false;
+ if (activeGuestFilter === 'open') return !g.checkedIn;
+ if (activeGuestFilter === 'checkedin') return g.checkedIn;
+ if (activeGuestFilter === 'u18') return g.category === 'u18';
+ if (activeGuestFilter === 'ue18') return g.category === 'ue18';
+ if (activeGuestFilter === 'unpaid') return !g.paid;
+ return true;
+ });
+
+ const resBadge = document.getElementById('guestResultsBadge');
+ if (resBadge) {
+ resBadge.textContent = (term || activeGuestFilter !== 'all') ? `${filtered.length} von ${totalCount} Gästen` : `${totalCount} Gäste gesamt`;
+ }
+
+ // Sort by name default (Alphabetical)
+ filtered.sort((a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'base' }));
+
+ // Desktop Table
+ const tbody = document.getElementById('guestTableBody');
+ if (tbody) {
+ if (filtered.length === 0) {
+ tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:32px 16px; color:var(--text-dim);">Keine passenden Gäste für diesen Filter gefunden.</td></tr>`;
+ } else {
+ tbody.innerHTML = filtered.map(g => {
+ const roleBadge = g.isOrderer
+ ? `<span class="guest-role-pill orderer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px; height:11px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Besteller</span>`
+ : `<span class="guest-role-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px; height:11px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>${escapeHtml(g.role)}</span>`;
+
+ const catBadge = `<span class="badge out">${categoryLabel(g.category)}</span>` +
+ (g.category === 'u18' && g.schoolClass ? ` <span class="badge out" style="color:var(--accent-glow); border-color:rgba(143,180,255,0.35); background:rgba(143,180,255,0.12);">Kl. ${escapeHtml(g.schoolClass)}</span>` : '');
+
+ const payBadge = g.paid
+ ? `<span class="badge in"> Bezahlt</span>`
+ : `<span class="badge out" style="color:#ff8080; background:rgba(255,128,128,0.14); border-color:rgba(255,128,128,0.4); font-weight:700;">Unbezahlt</span>`;
+
+ const timeStr = g.checkedInAt ? formatCheckinTime(g.checkedInAt) : '';
+
+ return `
+ <tr>
+ <td>
+ <div style="font-weight:700; color:#fff; font-size:14px;">${escapeHtml(g.name)}</div>
+ ${g.reg && g.reg.email ? `<div style="font-size:11px; color:var(--text-dim); margin-top:2px;">${escapeHtml(g.reg.email)}</div>` : ''}
+ </td>
+ <td>${roleBadge}</td>
+ <td>${catBadge}</td>
+ <td><div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">${payBadge}</div></td>
+ <td><span style="font-family:monospace; font-size:12px; color:var(--accent-glow);">${escapeHtml(g.ticketId)}</span></td>
+ <td>
+ <button type="button" class="guest-checkin-btn ${g.checkedIn ? 'checked' : ''}" data-ticket-id="${g.ticket.id}" data-name="${escapeHtml(g.name)}" data-state="${g.checkedIn ? '1' : '0'}">
+ ${g.checkedIn
+ ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px; height:13px;"><polyline points="20 6 9 17 4 12"/></svg><span>Eingecheckt</span> ${timeStr ? `<small>(${timeStr})</small>` : ''}`
+ : `<span>Einchecken</span>`}
+ </button>
+ </td>
+ </tr>
+ `;
+ }).join('');
+ }
+ }
+
+ // Mobile Cards View
+ const mobileWrap = document.getElementById('guestMobileCardsWrap');
+ if (mobileWrap) {
+ if (filtered.length === 0) {
+ mobileWrap.innerHTML = `<div style="text-align:center; padding:32px 16px; color:var(--text-dim); background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius);">Keine Gäste gefunden.</div>`;
+ } else {
+ mobileWrap.innerHTML = filtered.map(g => {
+ const timeStr = g.checkedInAt ? formatCheckinTime(g.checkedInAt) : '';
+ return `
+ <div style="background:linear-gradient(145deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%); border:1px solid var(--glass-border); border-radius:var(--radius); padding:16px; margin-bottom:12px; display:flex; flex-direction:column; gap:10px;">
+ <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+ <div>
+ <div style="font-size:16px; font-weight:700; color:#fff;">${escapeHtml(g.name)}</div>
+ <div style="font-size:11.5px; color:var(--text-dim); margin-top:2px;">${escapeHtml(g.role)}</div>
+ </div>
+ <div>
+ <span class="badge out">${categoryLabel(g.category)}</span>
+ ${g.category === 'u18' && g.schoolClass ? `<span class="badge out" style="color:var(--accent-glow);">Kl. ${escapeHtml(g.schoolClass)}</span>` : ''}
+ </div>
+ </div>
+
+ <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-top:1px solid rgba(255,255,255,0.06); border-bottom:1px solid rgba(255,255,255,0.06);">
+ <div style="font-size:12px;">
+ ${g.paid
+ ? `<span class="badge in"> Bezahlt</span>`
+ : `<span class="badge out" style="color:#ff8080; background:rgba(255,128,128,0.14);">Unbezahlt</span>`}
+ </div>
+ <div style="font-family:monospace; font-size:12px; color:var(--accent-glow);">${escapeHtml(g.ticketId)}</div>
+ </div>
+
+ <button type="button" class="guest-checkin-btn ${g.checkedIn ? 'checked' : ''}" data-ticket-id="${g.ticket.id}" data-name="${escapeHtml(g.name)}" data-state="${g.checkedIn ? '1' : '0'}" style="width:100%; justify-content:center; padding:11px;">
+ ${g.checkedIn
+ ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px; height:14px;"><polyline points="20 6 9 17 4 12"/></svg><span>Eingecheckt</span> ${timeStr ? `<small>(${timeStr})</small>` : ''}`
+ : `<span>Einchecken</span>`}
+ </button>
+ </div>
+ `;
+ }).join('');
+ }
+ }
+
+ // Attach listeners
+ document.querySelectorAll('.guest-checkin-btn').forEach(btn => {
+ btn.addEventListener('click', () => {
+ toggleCheckIn(btn.dataset.ticketId, btn.dataset.state === '1', btn.dataset.name);
+ });
+ });
+ }
+
+ // Filter chips in guest list
+ document.querySelectorAll('[data-guest-filter]').forEach(chip => {
+ chip.addEventListener('click', () => {
+ document.querySelectorAll('[data-guest-filter]').forEach(c => c.classList.remove('active'));
+ chip.classList.add('active');
+ activeGuestFilter = chip.dataset.guestFilter;
+ renderGuestList();
+ });
+ });
+
+ document.getElementById('guestSearch')?.addEventListener('input', renderGuestList);
+ document.getElementById('guestSearchClearBtn')?.addEventListener('click', () => {
+ const inp = document.getElementById('guestSearch');
+ if (inp) { inp.value = ''; inp.focus(); }
+ renderGuestList();
+ });
+
+
+ // =========================================================================
+ // 2. KASSEN- & PAUSEN-MODUS (SCHNELLKASSIERUNG IN DER SCHULE)
+ // =========================================================================
+ async function fastCashConfirm(regId){
+ const reg = allRegs.find(r => r.id === regId);
+ if (!reg) return;
+ const dueCents = ticketsDueCents(regId);
+ const tickets = ticketsFor(regId);
+ if (!tickets.length) return;
+
+ try {
+ const batch = writeBatch(db);
+ batch.update(doc(db, 'registrations', regId), { paid: true, paidAt: serverTimestamp() });
+ tickets.forEach(t => batch.update(doc(db, 'tickets', t.id), { paid: true }));
+ await batch.commit();
+
+ playCheckinChime();
+ showAdminToast(` ${formatCents(dueCents)} bar kassiert von ${reg.name}!`);
+
+ // Clear search input and focus it for the next student in line
+ const sInput = document.getElementById('cashierSearchInput');
+ if (sInput) {
+ sInput.value = '';
+ sInput.focus();
+ }
+
+ // Send tickets email asynchronously in background
+ (async () => {
+ try {
+ const priceSnap = await getDoc(doc(db, 'settings', 'pricing'));
+ const freshPrices = priceSnap.exists()
+ ? { u18: Number(priceSnap.data().u18 || 0), ue18: Number(priceSnap.data().ue18 || 0) }
+ : { u18: 0, ue18: 0 };
+ const idToken = await auth.currentUser.getIdToken();
+ const salutation = reg.salutation || (reg.anrede === 'Sie' ? 'sie' : 'du');
+ const anrede = salutation === 'sie' ? 'Sie' : 'Du';
+ const expectedLernSax = resolveUseLernSax(reg);
+ const res = await workerFetch('/send-tickets', {
+ method: 'POST',
+ headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + idToken},
+ body: JSON.stringify({
+ email: reg.email,
+ ordererName: reg.name,
+ salutation, anrede,
+ isFormal: salutation === 'sie',
+ formell: salutation === 'sie',
+ greeting: salutation === 'sie' ? `Guten Tag ${reg.name}` : `Hallo ${reg.name}`,
+ attendees: tickets.map(t => ({
+ name: t.name, ticketId: t.ticketId, category: t.category,
+ price: freshPrices[t.category] || 0
+ })),
+ useLernSax: expectedLernSax,
+ donation: Number(reg.donation || 0)
+ })
+ });
+ const resData = await res.json().catch(() => ({}));
+ if (res.ok) {
+ const via = resData.via || (expectedLernSax ? 'lernsax' : 'brevo');
+ try {
+ await updateDoc(doc(db, 'registrations', regId), {
+ mailVia: via,
+ ticketsSentAt: serverTimestamp(),
+ ...(typeof resData.savedToSent === 'boolean' ? { savedToSent: resData.savedToSent, sentFolder: resData.sentFolder || null } : {})
+ });
+ reg.mailVia = via;
+ if (typeof resData.savedToSent === 'boolean') {
+ reg.savedToSent = resData.savedToSent;
+ reg.sentFolder = resData.sentFolder || null;
+ }
+ render();
+ renderCashier();
+ } catch(_) {}
+ }
+ } catch(e) {
+ console.warn('Background ticket email dispatch:', e);
+ }
+ })();
+
+ } catch(err){
+ console.error(err);
+ alert('Fehler beim Kassieren: ' + (err.message || String(err)));
+ }
+ }
+
+ function renderCashierMode(){
+ const now = new Date();
+
+ // 1. Calculate Today's intake
+ const todayRegs = allRegs.filter(r => {
+ const pDate = getRegistrationPaymentDate(r);
+ return pDate && isSameCalendarDay(pDate, now);
+ });
+
+ let todayPaidCents = 0;
+ let todayU18Tickets = 0;
+ let todayUe18Tickets = 0;
+
+ todayRegs.forEach(r => {
+ const tickets = ticketsFor(r.id);
+ tickets.forEach(t => {
+ if (t.paid || r.paid) {
+ const pr = getTicketPriceCents(t.category);
+ todayPaidCents += pr;
+ if (t.category === 'u18') todayU18Tickets++;
+ else if (t.category === 'ue18') todayUe18Tickets++;
+ }
+ });
+ });
+
+ const totalTodayTickets = todayU18Tickets + todayUe18Tickets;
+ const summaryStr = `Heute eingenommen: ${formatCents(todayPaidCents)} Bar · ${totalTodayTickets} Tickets bezahlt (${todayU18Tickets}× U18 · ${todayUe18Tickets}× Ü18)`;
+
+ const elSummary = document.getElementById('cashierTodaySummaryText');
+ if (elSummary) elSummary.textContent = summaryStr;
+
+ const elBadge = document.getElementById('tabCashTodayBadge');
+ if (elBadge) {
+ elBadge.textContent = formatCents(todayPaidCents);
+ elBadge.title = summaryStr;
+ }
+
+ // 2. Search & filter in break mode
+ const searchInput = document.getElementById('cashierSearchInput');
+ const term = (searchInput ? searchInput.value : '').trim().toLowerCase();
+ const onlyUnpaid = document.getElementById('cashierOnlyUnpaidToggle')?.checked ?? true;
+
+ const matchedRegs = allRegs.filter(r => {
+ const tickets = ticketsFor(r.id);
+ const isUnpaid = !r.paid || tickets.some(t => !t.paid);
+ if (onlyUnpaid && !isUnpaid) return false;
+
+ if (!term) return true;
+ return (r.name || '').toLowerCase().includes(term) ||
+ (r.email || '').toLowerCase().includes(term) ||
+ (r.schoolClass || '').toLowerCase().includes(term) ||
+ (r.companions || []).some(c => (c.name || '').toLowerCase().includes(term) || (c.schoolClass || '').toLowerCase().includes(term)) ||
+ tickets.some(t => (t.name || '').toLowerCase().includes(term) || (t.ticketId || '').toLowerCase().includes(term));
+ });
+
+ const countEl = document.getElementById('cashierResultsCount');
+ if (countEl) countEl.textContent = `${matchedRegs.length} Schüler gefunden`;
+
+ // 3. Render Cashier Cards Grid
+ const grid = document.getElementById('cashierCardsGrid');
+ if (grid) {
+ if (matchedRegs.length === 0) {
+ grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:36px 16px; color:var(--text-dim); background:var(--glass); border:1px solid var(--glass-border); border-radius:var(--radius);">
+ ${term ? `Keine Schüler für "${escapeHtml(term)}" gefunden.` : (onlyUnpaid ? 'Keine unbezahlten Bestellungen offen! Alle erfassten Schüler haben bezahlt.' : 'Keine Bestellungen vorhanden.')}
+ </div>`;
+ } else {
+ grid.innerHTML = matchedRegs.map(r => {
+ const tickets = ticketsFor(r.id);
+ const dueCents = ticketsDueCents(r.id);
+ const hasExplicitlyPaid = tickets.some(t => t.paid === true);
+ const isPartial = hasExplicitlyPaid && tickets.some(t => !t.paid);
+
+ const ticketListHtml = tickets.map(t => {
+ const cat = categoryLabel(t.category);
+ const cl = t.schoolClass || (t.name === r.name ? r.schoolClass : null);
+ return `<div style="display:flex; justify-content:space-between; align-items:center; padding:2px 0;">
+ <span>• <strong>${escapeHtml(t.name)}</strong> (${cat}${cl ? `, Kl. ${escapeHtml(cl)}` : ''})</span>
+ <span style="color:${t.paid ? '#7fe0a8' : '#ffd27f'}; font-weight:600;">${t.paid ? ' Bezahlt' : formatCents(getTicketPriceCents(t.category))}</span>
+ </div>`;
+ }).join('');
+
+ const isFullyPaid = r.paid && !isPartial;
+
+ return `
+ <div class="cashier-card ${isFullyPaid ? 'paid-card' : ''}">
+ <div class="cashier-card-top">
+ <div>
+ <div class="cashier-card-name">${escapeHtml(r.name)}</div>
+ <div style="font-size:12px; color:var(--accent-glow); margin-top:2px;">
+ ${r.schoolClass ? `Klasse ${escapeHtml(r.schoolClass)} · ` : ''}${tickets.length} Ticket${tickets.length > 1 ? 's' : ''}
+ </div>
+ </div>
+ <div class="cashier-card-due">${isFullyPaid ? ('<span style="color:#7fe0a8; font-size:16px;">✓ Bezahlt</span>' + (parseMoneyNumber(r.donation, 0) > 0 ? (' <div style="font-size:11.5px; color:#ffd27f; font-weight:700; text-align:right; margin-top:2px;">+' + formatCents(parseMoneyCents(r.donation)) + ' Spende</div>') : '')) : formatCents(dueCents)}</div>
+ </div>
+
+ <div class="cashier-card-tickets">
+ ${ticketListHtml}
+ </div>
+
+ <div class="cashier-card-actions">
+ ${!isFullyPaid ? `
+ <button type="button" class="fast-pay-btn fast-cash-confirm-btn" data-reg-id="${r.id}" title="1-Klick Schnell-Kassieren">
+ <span> Passend (${formatCents(dueCents)})</span>
+ </button>
+ <button type="button" class="fast-change-btn fast-cash-change-btn" data-reg-id="${r.id}" title="Numpad öffnen &amp; Rückgeld berechnen">
+ <span> Wechselgeld</span>
+ </button>
+ ` : `
+ <div style="color:var(--success); font-weight:700; font-size:13px; display:flex; align-items:center; gap:6px;">
+ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:15px; height:15px;"><polyline points="20 6 9 17 4 12"/></svg>
+ <span>Vollständig bezahlt</span>
+ </div>
+ `}
+ ${(r.paid || isPartial) ? `
+ <button type="button" class="fast-change-btn cashier-invoice-btn" data-reg-id="${r.id}" title="Quittung herunterladen" style="margin-left:auto;">
+ <span>Quittung</span>
+ </button>
+ ` : ''}
+ </div>
+ </div>
+ `;
+ }).join('');
+ }
+ }
+
+ // 4. Render Today's Cash Log Table
+ const logWrap = document.getElementById('cashierTodayLogTableWrap');
+ if (logWrap) {
+ if (todayRegs.length === 0) {
+ logWrap.innerHTML = `<div style="color:var(--text-dim); font-size:12.5px; text-align:center; padding:18px;">Heute wurden noch keine Barzahlungen verbucht.</div>`;
+ } else {
+ todayRegs.sort((a, b) => {
+ const da = getRegistrationPaymentDate(a) || 0;
+ const db = getRegistrationPaymentDate(b) || 0;
+ return db - da;
+ });
+
+ logWrap.innerHTML = `
+ <table class="kassensturz-table">
+ <thead>
+ <tr>
+ <th>Uhrzeit</th>
+ <th>Schüler / Besteller</th>
+ <th>Tickets &amp; Aufteilung</th>
+ <th>Betrag</th>
+ <th>Aktion</th>
+ </tr>
+ </thead>
+ <tbody>
+ ${todayRegs.map(r => {
+ const pDate = getRegistrationPaymentDate(r);
+ const timeStr = pDate ? pDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr' : '–';
+ const tickets = ticketsFor(r.id);
+ const u18Count = tickets.filter(t => t.category === 'u18').length;
+ const ue18Count = tickets.filter(t => t.category === 'ue18').length;
+					const baseCents = tickets.reduce((sum, t) => sum + getTicketPriceCents(t.category), 0);
+					const donCents = parseMoneyCents(r.donation, 0);
+					const paidCents = baseCents + donCents;
+					let detailStr = `${tickets.length}× (${u18Count > 0 ? u18Count + '× U18' : ''}${u18Count > 0 && ue18Count > 0 ? ' · ' : ''}${ue18Count > 0 ? ue18Count + '× Ü18' : ''})`;
+					if (donCents > 0) {
+						detailStr += ` · <span style="color:#ffd27f; font-weight:700;">+${formatCents(donCents)} Spende</span>`;
+					}
+
+ return `
+ <tr>
+ <td style="color:#ffd27f; font-weight:700;">${timeStr}</td>
+ <td><strong>${escapeHtml(r.name)}</strong>${r.schoolClass ? ` <span style="color:var(--text-dim); font-size:11px;">(Kl. ${escapeHtml(r.schoolClass)})</span>` : ''}</td>
+ <td>${detailStr}</td>
+ <td style="color:var(--success); font-weight:700;">${formatCents(paidCents)}</td>
+ <td>
+ <button type="button" class="cashier-invoice-btn" data-reg-id="${r.id}" style="padding:3px 8px; border-radius:4px; font-size:11px; border:1px solid var(--glass-border); background:rgba(255,255,255,0.06); color:var(--text); cursor:pointer;">Quittung</button>
+ </td>
+ </tr>
+ `;
+ }).join('')}
+ </tbody>
+ </table>
+ `;
+ }
+ }
+
+ // Attach listeners
+ document.querySelectorAll('.fast-cash-confirm-btn').forEach(btn => {
+ btn.addEventListener('click', () => fastCashConfirm(btn.dataset.regId));
+ });
+ document.querySelectorAll('.fast-cash-change-btn').forEach(btn => {
+ btn.addEventListener('click', () => openCashModal(btn.dataset.regId));
+ });
+ document.querySelectorAll('.cashier-invoice-btn').forEach(btn => {
+ btn.addEventListener('click', () => downloadInvoicePdf(btn.dataset.regId, btn));
+ });
+ }
+
+ document.getElementById('cashierSearchInput')?.addEventListener('input', renderCashierMode);
+ document.getElementById('cashierOnlyUnpaidToggle')?.addEventListener('change', renderCashierMode);
+ document.getElementById('openKassensturzBtn')?.addEventListener('click', () => openKassensturz('today'));
+ document.getElementById('printTodayCashProtocolBtn')?.addEventListener('click', printKassensturzProtocol);
+
+
+ // =========================================================================
+ // 3. KASSENSTURZ-FILTER & PROTOKOLL (OHNE KLASSENFILTER)
+ // =========================================================================
+ let kassensturzPeriod = 'today'; // 'today', 'last30', 'yesterday', 'all'
+
+ function getPaymentsForPeriod(period){
+ const now = new Date();
+ const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+ const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
+
+ return allRegs.filter(r => {
+ if (!r.paid) return false;
+ const pDate = getRegistrationPaymentDate(r);
+ if (!pDate) return false;
+
+ if (period === 'today') return isSameCalendarDay(pDate, now);
+ if (period === 'last30') return pDate >= thirtyMinAgo;
+ if (period === 'yesterday') return isSameCalendarDay(pDate, yesterday);
+ if (period === 'all') return true;
+ return true;
+ });
+ }
+
+ function openKassensturz(period = 'today'){
+ kassensturzPeriod = period;
+
+ // Update active pill
+ document.querySelectorAll('.kassensturz-pill').forEach(p => {
+ p.classList.toggle('active', p.dataset.period === period);
+ });
+
+ const regs = getPaymentsForPeriod(period);
+
+ let totalCents = 0;
+		let u18Count = 0;
+		let ue18Count = 0;
+		let u18Cents = 0;
+		let ue18Cents = 0;
+		let donationCents = 0;
+		let donationCount = 0;
+
+		regs.forEach(r => {
+			const tickets = ticketsFor(r.id);
+			tickets.forEach(t => {
+				if (t.paid || r.paid) {
+					const pr = getTicketPriceCents(t.category);
+					totalCents += pr;
+					if (t.category === 'u18') {
+						u18Count++;
+						u18Cents += pr;
+					} else if (t.category === 'ue18') {
+						ue18Count++;
+						ue18Cents += pr;
+					}
+				}
+			});
+			const dC = parseMoneyCents(r.donation, 0);
+			if (dC > 0) {
+				donationCents += dC;
+				donationCount++;
+				totalCents += dC;
+			}
+		});
+
+ const totalTickets = u18Count + ue18Count;
+ const periodTitles = {
+ today: 'Einnahmen Heute (Alle Pausen)',
+ last30: 'Einnahmen Letzte Pause (30 Min.)',
+ yesterday: 'Einnahmen Gestern',
+ all: 'Gesamter Vorverkauf (Alle Tage)'
+ };
+
+ const pLabel = document.getElementById('kassensturzPeriodLabel');
+ if (pLabel) pLabel.textContent = periodTitles[period] || 'Kassensturz';
+ const pAmt = document.getElementById('kassensturzTotalAmount');
+ if (pAmt) pAmt.textContent = formatCents(totalCents);
+ const pBreakdown = document.getElementById('kassensturzBreakdownText');
+ if (pBreakdown) {
+ let bText = `${totalTickets} Tickets bezahlt (${u18Count}× U18 à ${formatCents(getTicketPriceCents('u18'))} · ${ue18Count}× Ü18 à ${formatCents(getTicketPriceCents('ue18'))})`;
+		if (donationCents > 0) {
+			bText += ` + ${formatCents(donationCents)} freiwillige Spenden (${donationCount}×)`;
+		}
+		pBreakdown.textContent = bText;
+ }
+
+ const subDetailsEl = document.getElementById('kassensturzSubDetails');
+ if (subDetailsEl) {
+ if (regs.length > 0) {
+ subDetailsEl.textContent = `${regs.length} Schüler / Bestellungen kassiert · Ohne Klassenfilter`;
+ } else {
+ subDetailsEl.textContent = 'Keine Barzahlungen in diesem Zeitraum erfasst';
+ }
+ }
+
+ const elU18 = document.getElementById('kStatU18');
+ if (elU18) elU18.textContent = `${u18Count}× (${formatCents(u18Cents)})`;
+ const elUe18 = document.getElementById('kStatUe18');
+ if (elUe18) elUe18.textContent = `${ue18Count}× (${formatCents(ue18Cents)})`;
+ const elOrders = document.getElementById('kStatOrders');
+ if (elOrders) elOrders.textContent = `${regs.length} Vorgänge`;
+ const elTickets = document.getElementById('kStatTickets');
+ if (elTickets) elTickets.textContent = `${totalTickets} Tickets`;
+ const elListCount = document.getElementById('kassensturzListCount');
+ if (elListCount) elListCount.textContent = `${regs.length} Buchungen`;
+
+ // Table rows
+ const tbody = document.getElementById('kassensturzTableBody');
+ if (tbody) {
+ if (regs.length === 0) {
+ tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:18px; color:var(--text-dim);">Keine Zahlungen im gewählten Zeitraum.</td></tr>`;
+ } else {
+ regs.sort((a, b) => (getRegistrationPaymentDate(b) || 0) - (getRegistrationPaymentDate(a) || 0));
+ tbody.innerHTML = regs.map(r => {
+ const pDate = getRegistrationPaymentDate(r);
+ const timeStr = pDate ? pDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr' : '–';
+ const tickets = ticketsFor(r.id);
+ const u18 = tickets.filter(t => t.category === 'u18').length;
+ const ue18 = tickets.filter(t => t.category === 'ue18').length;
+ const baseCents = tickets.reduce((sum, t) => sum + getTicketPriceCents(t.category), 0);
+				const donCents = parseMoneyCents(r.donation, 0);
+				const paidCents = baseCents + donCents;
+				const donBadge = donCents > 0 ? ` <span style="color:#ffd27f; font-size:11px; font-weight:700;">(+${formatCents(donCents)} Spende)</span>` : '';
+
+ return `
+ <tr>
+ <td style="color:#ffd27f; font-weight:700;">${timeStr}</td>
+ <td><strong>${escapeHtml(r.name)}</strong>${r.schoolClass ? ` <span style="color:var(--text-dim); font-size:11px;">(Kl. ${escapeHtml(r.schoolClass)})</span>` : ''}</td>
+ <td>${tickets.length}× (${u18 > 0 ? u18 + '× U18' : ''}${u18 > 0 && ue18 > 0 ? ' · ' : ''}${ue18 > 0 ? ue18 + '× Ü18' : ''})${donBadge}</td>
+ <td style="color:var(--success); font-weight:700;">${formatCents(paidCents)}</td>
+ </tr>
+ `;
+ }).join('');
+ }
+ }
+
+ document.getElementById('kassensturzModalOverlay')?.classList.add('show');
+ }
+
+ function closeKassensturz(){
+ document.getElementById('kassensturzModalOverlay')?.classList.remove('show');
+ }
+
+ function printKassensturzProtocol(){
+		const regs = getPaymentsForPeriod(kassensturzPeriod);
+		const now = new Date();
+		let totalCents = 0;
+		let u18Count = 0;
+		let ue18Count = 0;
+		let donationCents = 0;
+		let donationCount = 0;
+
+		regs.forEach(r => {
+			const tickets = ticketsFor(r.id);
+			tickets.forEach(t => {
+				if (t.paid || r.paid) {
+					totalCents += getTicketPriceCents(t.category);
+					if (t.category === 'u18') u18Count++;
+					else if (t.category === 'ue18') ue18Count++;
+				}
+			});
+			const dC = parseMoneyCents(r.donation, 0);
+			if (dC > 0) {
+				donationCents += dC;
+				donationCount++;
+				totalCents += dC;
+			}
+		});
+
+ const periodNames = {
+ today: 'Heute (Pausenverkauf)',
+ last30: 'Letzte Pause (30 Minuten)',
+ yesterday: 'Gestern',
+ all: 'Gesamter Vorverkauf'
+ };
+
+ const container = document.getElementById('printContainer');
+ if (!container) return;
+ container.innerHTML = `
+ <div style="font-family:'Segoe UI',Arial,sans-serif; color:#000; padding:15mm; line-height:1.5;">
+ <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #000; padding-bottom:12px; margin-bottom:16px;">
+ <div>
+ <h1 style="font-size:22px; margin:0 0 4px 0; font-weight:800;">WINTERBALL 2027 · GYMNASIUM WILSDRUFF</h1>
+ <h2 style="font-size:15px; margin:0; font-weight:600; color:#333;">Kassenabschluss &amp; Pausenprotokoll (${periodNames[kassensturzPeriod] || 'Kassensturz'})</h2>
+ </div>
+ <div style="text-align:right; font-size:12px;">
+ <div>Datum / Uhrzeit: <strong>${now.toLocaleDateString('de-DE')} · ${now.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})} Uhr</strong></div>
+ <div>Veranstaltung: <strong>30. Januar 2027</strong></div>
+ </div>
+ </div>
+
+ <div style="background:#f4f5f8; border:1px solid #ccc; padding:14px 18px; border-radius:6px; margin-bottom:20px;">
+ <div style="font-size:13px; text-transform:uppercase; font-weight:700; color:#555;">Kassierte Gesamteinnahme (Bar)</div>
+ <div style="font-size:32px; font-weight:900; color:#000; margin:4px 0;">${formatCents(totalCents)}</div>
+ <div style="font-size:14px; font-weight:600;">
+ Stückelung: <strong>${u18Count + ue18Count} Tickets gesamt</strong>
+ (<strong>${u18Count}× U18</strong> à ${formatCents(getTicketPriceCents('u18'))} = ${formatCents(u18Count * getTicketPriceCents('u18'))} ·
+ <strong>${ue18Count}× Ü18</strong> à ${formatCents(getTicketPriceCents('ue18'))} = ${formatCents(ue18Count * getTicketPriceCents('ue18'))})
+ </div>
+ <div style="font-size:12px; color:#666; margin-top:4px;">Erfasst über ${regs.length} Schüler-Bestellungen · Abrechnung ohne Klassenfilter${donationCents > 0 ? ` · davon <strong>${formatCents(donationCents)} freiwillige Spenden</strong> (${donationCount} Spender für JG 12)` : ''}</div>
+ </div>
+
+ <h3 style="font-size:14px; margin:0 0 8px 0; text-transform:uppercase;">Einzelaufstellung der Zahlungen:</h3>
+ <table style="width:100%; border-collapse:collapse; font-size:11.5px; margin-bottom:30px;">
+ <thead>
+ <tr style="background:#e5e7eb;">
+ <th style="border:1px solid #999; padding:6px 8px; text-align:left;">Nr.</th>
+ <th style="border:1px solid #999; padding:6px 8px; text-align:left;">Uhrzeit</th>
+ <th style="border:1px solid #999; padding:6px 8px; text-align:left;">Schüler / Besteller</th>
+ <th style="border:1px solid #999; padding:6px 8px; text-align:left;">Klasse</th>
+ <th style="border:1px solid #999; padding:6px 8px; text-align:left;">Tickets &amp; Aufteilung</th>
+ <th style="border:1px solid #999; padding:6px 8px; text-align:right;">Betrag</th>
+ </tr>
+ </thead>
+ <tbody>
+ ${regs.map((r, i) => {
+ const pDate = getRegistrationPaymentDate(r);
+ const timeStr = pDate ? pDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr' : '–';
+ const tickets = ticketsFor(r.id);
+ const u18 = tickets.filter(t => t.category === 'u18').length;
+ const ue18 = tickets.filter(t => t.category === 'ue18').length;
+ const baseCents = tickets.reduce((sum, t) => sum + getTicketPriceCents(t.category), 0);
+			const donCents = parseMoneyCents(r.donation, 0);
+			const paidCents = baseCents + donCents;
+			const pDonBadge = donCents > 0 ? ` · <strong style="color:#059669;">+${formatCents(donCents)} Spende</strong>` : '';
+ return `
+ <tr>
+ <td style="border:1px solid #ccc; padding:5px 8px;">${i + 1}</td>
+ <td style="border:1px solid #ccc; padding:5px 8px;">${timeStr}</td>
+ <td style="border:1px solid #ccc; padding:5px 8px;"><strong>${escapeHtml(r.name)}</strong></td>
+ <td style="border:1px solid #ccc; padding:5px 8px;">${escapeHtml(r.schoolClass || '—')}</td>
+ <td style="border:1px solid #ccc; padding:5px 8px;">${tickets.length}× (${u18 > 0 ? u18 + '× U18' : ''}${u18 > 0 && ue18 > 0 ? ', ' : ''}${ue18 > 0 ? ue18 + '× Ü18' : ''})${pDonBadge}</td>
+ <td style="border:1px solid #ccc; padding:5px 8px; text-align:right; font-weight:700;">${formatCents(paidCents)}</td>
+ </tr>
+ `;
+ }).join('')}
+ </tbody>
+ <tfoot>
+ <tr style="background:#e5e7eb; font-weight:800;">
+ <td colspan="5" style="border:1px solid #999; padding:6px 8px; text-align:right;">GESAMTSUMME BAR:</td>
+ <td style="border:1px solid #999; padding:6px 8px; text-align:right;">${formatCents(totalCents)}</td>
+ </tr>
+ </tfoot>
+ </table>
+
+ <div style="display:grid; grid-template-columns:1fr 1fr; gap:30px; margin-top:40px; page-break-inside:avoid;">
+ <div style="border-top:1px solid #000; padding-top:6px; font-size:12px;">
+ <div>Bargeld gezählt &amp; übergeben von (Kassenwart / Schüler):</div>
+ <div style="margin-top:28px;">Name in Druckschrift: ____________________________________</div>
+ <div style="margin-top:10px;">Unterschrift: _____________________________________________</div>
+ </div>
+ <div style="border-top:1px solid #000; padding-top:6px; font-size:12px;">
+ <div>Geprüft &amp; empfangen durch (Lehrkraft / Organisation):</div>
+ <div style="margin-top:28px;">Name in Druckschrift: ____________________________________</div>
+ <div style="margin-top:10px;">Unterschrift: _____________________________________________</div>
+ </div>
+ </div>
+ </div>
+ `;
+
+ window.print();
+ }
+
+ // Kassensturz Events
+ document.getElementById('headerKassensturzBtn')?.addEventListener('click', () => openKassensturz('today'));
+ document.getElementById('kassensturzToolbarBtn')?.addEventListener('click', () => openKassensturz('today'));
+ document.getElementById('kassensturzCloseX')?.addEventListener('click', closeKassensturz);
+ document.getElementById('kassensturzCloseBtn')?.addEventListener('click', closeKassensturz);
+ document.getElementById('kassensturzModalOverlay')?.addEventListener('click', (e) => {
+ if (e.target.id === 'kassensturzModalOverlay') closeKassensturz();
+ });
+ document.querySelectorAll('.kassensturz-pill').forEach(pill => {
+ pill.addEventListener('click', () => openKassensturz(pill.dataset.period));
+ });
+ document.getElementById('printKassensturzBtn')?.addEventListener('click', printKassensturzProtocol);
+
+
+ // =========================================================================
+ // 4. DRUCKFÄHIGE NOTFALL-GÄSTELISTE (PDF ZUM AUSDRUCKEN)
+ // =========================================================================
+ function buildEmergencyPrintHtml(sortMode = 'lastname', filterMode = 'all'){
+ const now = new Date();
+ let guests = buildAllGuestsList();
+
+ if (filterMode === 'paid') guests = guests.filter(g => g.paid);
+ else if (filterMode === 'unpaid') guests = guests.filter(g => !g.paid);
+
+ // Sort
+ if (sortMode === 'lastname') {
+ guests.sort((a, b) => {
+ const partsA = a.name.trim().split(/\s+/);
+ const partsB = b.name.trim().split(/\s+/);
+ const lastA = partsA.length > 1 ? partsA[partsA.length - 1] : partsA[0];
+ const lastB = partsB.length > 1 ? partsB[partsB.length - 1] : partsB[0];
+ const comp = lastA.localeCompare(lastB, 'de', { sensitivity: 'base' });
+ return comp !== 0 ? comp : a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
+ });
+ } else {
+ guests.sort((a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'base' }));
+ }
+
+ const totalGuests = guests.length;
+ const u18Count = guests.filter(g => g.category === 'u18').length;
+ const ue18Count = guests.filter(g => g.category === 'ue18').length;
+ const paidCount = guests.filter(g => g.paid).length;
+ const unpaidCount = guests.filter(g => !g.paid).length;
+
+ // Group by initial letter
+ const groups = {};
+ guests.forEach(g => {
+ let key = '';
+ if (sortMode === 'lastname') {
+ const parts = g.name.trim().split(/\s+/);
+ const lastName = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+ key = (lastName[0] || '?').toUpperCase();
+ } else {
+ key = (g.name.trim()[0] || '?').toUpperCase();
+ }
+ if (!groups[key]) groups[key] = [];
+ groups[key].push(g);
+ });
+
+ const letterKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'de'));
+
+ let rowsHtml = '';
+ letterKeys.forEach(letter => {
+ rowsHtml += `
+ <tr class="print-sheet-letter-row">
+ <td colspan="7" style="background:#e9ecf2; font-weight:800; text-align:center; padding:5px 8px; font-size:13px; letter-spacing:2px; border:1px solid #bbb;">
+ — ${letter} —
+ </td>
+ </tr>
+ `;
+
+ groups[letter].forEach(g => {
+ const parts = g.name.trim().split(/\s+/);
+ let formattedName = escapeHtml(g.name);
+ if (sortMode === 'lastname' && parts.length > 1) {
+ const lastName = parts.pop();
+ const firstNames = parts.join(' ');
+ formattedName = `<strong>${escapeHtml(lastName)}</strong>, ${escapeHtml(firstNames)}`;
+ } else {
+ formattedName = `<strong>${escapeHtml(g.name)}</strong>`;
+ }
+
+ const roleText = g.isOrderer ? 'Besteller' : escapeHtml(g.role);
+ const catText = `${categoryLabel(g.category)}${g.schoolClass ? ' (Kl. ' + escapeHtml(g.schoolClass) + ')' : ''}`;
+ const payText = g.paid
+ ? `<span style="color:#0f5132; font-weight:700;">✓ Bezahlt</span>`
+ : `<span style="color:#842029; font-weight:800;">✗ OFFEN (${formatCents(getTicketPriceCents(g.category))})</span>`;
+
+ rowsHtml += `
+ <tr style="page-break-inside:avoid;">
+ <td style="text-align:center; width:28px; border:1px solid #ccc; padding:6px 4px;">
+ <span class="print-checkbox-box"></span>
+ </td>
+ <td style="border:1px solid #ccc; padding:6px 8px; font-size:12px;">
+ ${formattedName}
+ </td>
+ <td style="border:1px solid #ccc; padding:6px 8px; font-size:11px; color:#444;">
+ ${roleText}
+ </td>
+ <td style="border:1px solid #ccc; padding:6px 8px; font-size:11px; white-space:nowrap;">
+ ${catText}
+ </td>
+ <td style="border:1px solid #ccc; padding:6px 8px; font-size:11.5px; white-space:nowrap;">
+ ${payText}
+ </td>
+ <td style="border:1px solid #ccc; padding:6px 8px; font-family:monospace; font-size:11px; color:#333; white-space:nowrap;">
+ ${escapeHtml(g.ticketId)}
+ </td>
+ <td style="border:1px solid #ccc; padding:6px 8px; font-size:10.5px; color:#666; width:90px;">
+ &nbsp;
+ </td>
+ </tr>
+ `;
+ });
+ });
+
+ return `
+ <div style="font-family:'Segoe UI',Arial,sans-serif; color:#000; padding:10mm; line-height:1.45;">
+ <div style="border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:flex-start;">
+ <div>
+ <div style="font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#555;">Gymnasium Wilsdruff · Jahrgangsstufe 12</div>
+ <h1 style="font-size:20px; margin:2px 0 4px 0; font-weight:900; letter-spacing:-0.3px;">WINTERBALL 2027 · NOTFALL-GÄSTELISTE</h1>
+ <div style="font-size:12px; font-weight:600; color:#222;">Offizielle Einlass- &amp; Anwesenheitskontrolle · Gültig für den 30. Januar 2027 (Einlass ab 17:30 Uhr)</div>
+ </div>
+ <div style="text-align:right; font-size:11.5px;">
+ <div>Druckstand: <strong>${now.toLocaleDateString('de-DE')} · ${now.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})} Uhr</strong></div>
+ <div style="margin-top:2px;">Sortierung: <strong>${sortMode === 'lastname' ? 'Nachname (A–Z)' : 'Vorname (A–Z)'}</strong></div>
+ </div>
+ </div>
+
+ <div style="background:#f4f5f8; border:1px solid #ccc; border-radius:6px; padding:8px 12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; font-size:12px; line-height:1.5;">
+ <div>
+ <strong>${totalGuests} Gäste gelistet:</strong>
+ <span style="margin-left:8px;">${u18Count}× U18 · ${ue18Count}× Ü18</span>
+ <span style="margin-left:12px; color:#0f5132;"><strong>${paidCount} Bezahlt</strong></span> ·
+ <span style="margin-left:4px; color:#842029;"><strong>${unpaidCount} Unbezahlt (Abendkasse)</strong></span>
+ </div>
+ <div style="font-size:11px; color:#444;">
+ U18: Ausweispflicht &amp; Muttizettel abgleichen
+ </div>
+ </div>
+
+ <table class="print-sheet-table" style="width:100%; border-collapse:collapse; font-size:11.5px;">
+ <thead>
+ <tr style="background:#e5e7eb;">
+ <th style="width:28px; text-align:center;"></th>
+ <th>Name des Gastes</th>
+ <th>Rolle / Bezug</th>
+ <th>Kategorie</th>
+ <th>Zahlstatus</th>
+ <th>Ticket-ID</th>
+ <th>Einlass-Notiz</th>
+ </tr>
+ </thead>
+ <tbody>
+ ${rowsHtml}
+ </tbody>
+ </table>
+
+ <div style="margin-top:24px; border-top:1px solid #999; padding-top:8px; font-size:11px; display:flex; justify-content:space-between; color:#444; page-break-inside:avoid;">
+ <div>Winterball 2027 · Gymnasium Wilsdruff · Manuelle Einlasskontrolle bei Netzausfall</div>
+ <div>Einlass-Verantwortliche(r): ____________________________________ Unterschrift: _______________________</div>
+ </div>
+ </div>
+ `;
+ }
+
+ function openEmergencyPrintModal(){
+ const sortVal = document.getElementById('emergencySortSelect')?.value || 'lastname';
+ const filterVal = document.getElementById('emergencyFilterSelect')?.value || 'all';
+ const html = buildEmergencyPrintHtml(sortVal, filterVal);
+
+ const prevEl = document.getElementById('emergencyPrintPreview');
+ if (prevEl) prevEl.innerHTML = html;
+ const printCont = document.getElementById('printContainer');
+ if (printCont) printCont.innerHTML = html;
+ document.getElementById('emergencyPrintModalOverlay')?.classList.add('show');
+ }
+
+ function closeEmergencyPrintModal(){
+ document.getElementById('emergencyPrintModalOverlay')?.classList.remove('show');
+ }
+
+ function executeEmergencyPrint(){
+ const sortVal = document.getElementById('emergencySortSelect')?.value || 'lastname';
+ const filterVal = document.getElementById('emergencyFilterSelect')?.value || 'all';
+ const html = buildEmergencyPrintHtml(sortVal, filterVal);
+ const printCont = document.getElementById('printContainer');
+ if (printCont) printCont.innerHTML = html;
+ window.print();
+ }
+
+ // Emergency Print Events
+ document.getElementById('headerEmergencyPrintBtn')?.addEventListener('click', openEmergencyPrintModal);
+ document.getElementById('emergencyPrintToolbarBtn')?.addEventListener('click', openEmergencyPrintModal);
+ document.getElementById('guestlistPrintBtn')?.addEventListener('click', openEmergencyPrintModal);
+ document.getElementById('emergencyPrintCloseX')?.addEventListener('click', closeEmergencyPrintModal);
+ document.getElementById('emergencyPrintCloseBtn')?.addEventListener('click', closeEmergencyPrintModal);
+ document.getElementById('emergencyPrintModalOverlay')?.addEventListener('click', (e) => {
+ if (e.target.id === 'emergencyPrintModalOverlay') closeEmergencyPrintModal();
+ });
+ document.getElementById('emergencySortSelect')?.addEventListener('change', () => {
+ const sortVal = document.getElementById('emergencySortSelect')?.value || 'lastname';
+ const filterVal = document.getElementById('emergencyFilterSelect')?.value || 'all';
+ const html = buildEmergencyPrintHtml(sortVal, filterVal);
+ const prevEl = document.getElementById('emergencyPrintPreview');
+ if (prevEl) prevEl.innerHTML = html;
+ });
+ document.getElementById('emergencyFilterSelect')?.addEventListener('change', () => {
+ const sortVal = document.getElementById('emergencySortSelect')?.value || 'lastname';
+ const filterVal = document.getElementById('emergencyFilterSelect')?.value || 'all';
+ const html = buildEmergencyPrintHtml(sortVal, filterVal);
+ const prevEl = document.getElementById('emergencyPrintPreview');
+ if (prevEl) prevEl.innerHTML = html;
+ });
+ document.getElementById('executePrintBtn')?.addEventListener('click', executeEmergencyPrint);
+
+	// --- Wartungsmodus Management & UI ---
+	let isMaintenanceActive = false;
+
+	function updateMaintenanceUI(enabled, message, updatedDate) {
+		isMaintenanceActive = enabled;
+		const badge = document.getElementById('maintenanceStatusBadge');
+		const toggleBtn = document.getElementById('maintenanceToggleBtn');
+		const alertBanner = document.getElementById('adminMaintenanceAlertBanner');
+		const msgInput = document.getElementById('maintenanceMessageInput');
+		const updatedEl = document.getElementById('maintenanceLastUpdated');
+
+		if (badge) {
+			if (enabled) {
+				badge.style.background = 'rgba(255, 128, 128, 0.2)';
+				badge.style.color = '#ff8080';
+				badge.style.borderColor = 'rgba(255, 128, 128, 0.45)';
+				badge.innerHTML = '● Wartungsmodus AKTIV (Besucher gesperrt)';
+			} else {
+				badge.style.background = 'rgba(127, 224, 168, 0.15)';
+				badge.style.color = '#7fe0a8';
+				badge.style.borderColor = 'rgba(127, 224, 168, 0.3)';
+				badge.innerHTML = '● Website ist LIVE (Wartung AUS)';
+			}
+		}
+
+		if (toggleBtn) {
+			if (enabled) {
+				toggleBtn.style.background = 'rgba(127, 224, 168, 0.2)';
+				toggleBtn.style.color = '#7fe0a8';
+				toggleBtn.style.border = '1px solid rgba(127, 224, 168, 0.4)';
+				toggleBtn.textContent = 'Wartungsmodus beenden (Live schalten)';
+			} else {
+				toggleBtn.style.background = 'rgba(255, 170, 127, 0.2)';
+				toggleBtn.style.color = '#ffd27f';
+				toggleBtn.style.border = '1px solid rgba(255, 170, 127, 0.4)';
+				toggleBtn.textContent = 'Wartungsmodus aktivieren';
+			}
+		}
+
+		if (alertBanner) {
+			alertBanner.style.display = enabled ? 'block' : 'none';
+		}
+
+		if (msgInput && document.activeElement !== msgInput) {
+			msgInput.value = message || '';
+		}
+
+		if (updatedEl) {
+			if (updatedDate) {
+				updatedEl.textContent = 'Zuletzt aktualisiert: ' + updatedDate.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) + ' Uhr';
+			} else {
+				updatedEl.textContent = 'Zuletzt aktualisiert: —';
+			}
+		}
+	}
+
+	window.quickDisableMaintenance = async function() {
+		try {
+			await setDoc(doc(db, 'settings', 'maintenance'), {
+				enabled: false,
+				updatedAt: serverTimestamp()
+			}, { merge: true });
+			showAdminToast('Wartungsmodus beendet – Website ist wieder live! 🚀');
+		} catch(err) {
+			alert('Fehler beim Deaktivieren: ' + (err.message || String(err)));
+		}
+	};
+
+	document.getElementById('maintenanceToggleBtn')?.addEventListener('click', async () => {
+		const newStatus = !isMaintenanceActive;
+		const msgInput = document.getElementById('maintenanceMessageInput');
+		const message = msgInput ? msgInput.value.trim() : '';
+
+		if (newStatus) {
+			const ok = confirm('Möchtest du den Wartungsmodus wirklich aktivieren?\n\nNormale Besucher auf der Start- und Anmeldeseite sehen dann eine Wartungsseite und können keine Tickets buchen. Der Admin-Bereich bleibt für euch wie gewohnt offen.');
+			if (!ok) return;
+		}
+
+		try {
+			await setDoc(doc(db, 'settings', 'maintenance'), {
+				enabled: newStatus,
+				message,
+				updatedAt: serverTimestamp()
+			}, { merge: true });
+
+			showAdminToast(newStatus ? 'Wartungsmodus aktiviert! ⚠️' : 'Website ist wieder live! 🚀');
+		} catch(err) {
+			console.error('Wartungsmodus-Fehler:', err);
+			alert('Fehler beim Speichern: ' + (err.message || String(err)));
+		}
+	});
+
+	document.getElementById('maintenanceMessageSaveBtn')?.addEventListener('click', async () => {
+		const message = document.getElementById('maintenanceMessageInput').value.trim();
+		try {
+			await setDoc(doc(db, 'settings', 'maintenance'), {
+				message,
+				updatedAt: serverTimestamp()
+			}, { merge: true });
+
+			const savedEl = document.getElementById('maintenanceSaved');
+			if (savedEl) {
+				savedEl.classList.add('show');
+				setTimeout(() => savedEl.classList.remove('show'), 2000);
+			}
+			showAdminToast('Wartungsnachricht gespeichert!');
+		} catch(err) {
+			alert('Fehler beim Speichern: ' + (err.message || String(err)));
+		}
+	});
+</script>
+</body>
+</html>
